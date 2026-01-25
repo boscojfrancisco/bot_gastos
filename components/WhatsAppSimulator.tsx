@@ -11,10 +11,11 @@ interface WhatsAppSimulatorProps {
   onDeleteExpense: (id: string) => void;
   currentExpenses: Expense[];
   sheetUrl?: string;
+  userName: string;
 }
 
 const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({ 
-  messages, addMessage, onAddExpense, onDeleteExpense, currentExpenses, sheetUrl 
+  messages, addMessage, onAddExpense, onDeleteExpense, currentExpenses, sheetUrl, userName 
 }) => {
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -33,7 +34,8 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
     setIsProcessing(true);
 
     try {
-      const result = await processUserMessage(text, currentExpenses);
+      // Pasamos el userName aquí
+      const result = await processUserMessage(text, currentExpenses, userName);
       
       if (result.type === 'ADD_EXPENSE') {
         const data = result.data as any;
@@ -46,11 +48,10 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         let sync = '';
         if (sheetUrl) {
           sync = '\n\n✅ *Sincronizado con Sheets.*';
-          // Enviamos la petición de creación sin esperar bloqueante para mejor UX, o await si prefieres
           sheetsService.addExpense(sheetUrl, expenseWithId).catch(console.error);
         }
         
-        addMessage(`¡Listo! Registré $${data.amount} en **${data.description}**.\n📅 Fecha de gasto: ${data.expenseDate} ${sync}`, 'bot');
+        addMessage(`¡Listo ${userName}! Registré $${data.amount} en **${data.description}**.\n📅 Fecha de gasto: ${data.expenseDate} ${sync}`, 'bot');
       } 
       else if (result.type === 'DELETE_EXPENSE') {
         onDeleteExpense(result.id);
@@ -100,7 +101,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         {isProcessing && (
           <div className="flex justify-start">
             <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
-              <span className="text-xs font-bold text-emerald-600">GastoBot pensando</span>
+              <span className="text-xs font-bold text-emerald-600">GastoBot escribiendo...</span>
               <div className="flex gap-1">
                 <div className="w-1 h-1 bg-emerald-600 rounded-full animate-bounce"></div>
                 <div className="w-1 h-1 bg-emerald-600 rounded-full animate-bounce delay-100"></div>
@@ -116,7 +117,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Escribe un gasto (ej: Ayer gasté 500 en café)"
+          placeholder={`Escribe un gasto, ${userName}...`}
           className="flex-1 bg-white rounded-full px-5 py-3 shadow-inner outline-none text-[16px] text-slate-950 font-semibold border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 placeholder-slate-400"
         />
         <button 

@@ -48,7 +48,8 @@ const queryExpensesTool: FunctionDeclaration = {
 
 export async function processUserMessage(
   text: string, 
-  currentExpenses: Expense[]
+  currentExpenses: Expense[],
+  userName: string = "Amigo"
 ) {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
@@ -60,18 +61,21 @@ export async function processUserMessage(
       contents: [{ role: 'user', parts: [{ text: `Usuario: ${text}` }] }],
       config: {
         tools: [{ functionDeclarations: [addExpenseTool, deleteExpenseTool, queryExpensesTool] }],
-        systemInstruction: `Eres GastoBot Argentina. Hoy es ${dayName}, ${todayStr}.
+        systemInstruction: `Eres GastoBot Argentina. Estás hablando con ${userName}.
+        Hoy es ${dayName}, ${todayStr}.
+        
         REGLAS DE FECHAS:
-        1. Si el usuario dice "ayer", calcula la fecha restando 1 día a ${todayStr}.
+        1. Si ${userName} dice "ayer", calcula la fecha restando 1 día a ${todayStr}.
         2. Si dice "antes de ayer", resta 2 días.
         3. Si menciona un día (ej: "el lunes") o una fecha (ej: "el 10 de marzo"), calcula el YYYY-MM-DD correspondiente.
         4. Si NO menciona fecha, usa ${todayStr}.
         
         REGLAS DE MONTO:
-        - Si el monto es < 100, pregunta confirmación antes de registrar.
+        - Si el monto es < 100, pregunta a ${userName} si es correcto antes de registrar.
         
         REGLAS DE RESPUESTA:
-        - Sé breve y usa emojis. Confirma siempre la fecha que entendiste.`
+        - Sé breve, amigable y usa emojis. Dirígete a ${userName} por su nombre ocasionalmente.
+        - Confirma siempre la fecha que entendiste.`
       },
     });
 
@@ -92,7 +96,7 @@ export async function processUserMessage(
           e.category.toLowerCase().includes(query)
         );
         if (toDelete) return { type: 'DELETE_EXPENSE', id: toDelete.id, description: toDelete.description };
-        return { type: 'TEXT', text: `No encontré ningún gasto que coincida con "${args.searchQuery}".` };
+        return { type: 'TEXT', text: `No encontré ningún gasto que coincida con "${args.searchQuery}", ${userName}.` };
       }
       
       if (name === 'get_expenses_history') {
@@ -100,14 +104,14 @@ export async function processUserMessage(
             model: "gemini-3-pro-preview",
             contents: [{ role: 'user', parts: [{ text: `Gastos: ${JSON.stringify(currentExpenses)}. Pregunta: ${text}. Fecha actual: ${todayStr}` }] }],
             config: {
-                systemInstruction: "Analiza los gastos basándote en 'expenseDate'. Calcula totales por periodo. Sé visual y usa negritas."
+                systemInstruction: `Analiza los gastos para ${userName}. Calcula totales por periodo. Sé visual y usa negritas.`
             }
         });
         return { type: 'TEXT', text: summaryResponse.text };
       }
     }
 
-    return { type: 'TEXT', text: response.text || "No entendí del todo, ¿me lo repetís?" };
+    return { type: 'TEXT', text: response.text || `No entendí del todo, ${userName}, ¿me lo repetís?` };
   } catch (error) {
     return { type: 'TEXT', text: "Hubo un problema. ¿Podés intentar de nuevo?" };
   }

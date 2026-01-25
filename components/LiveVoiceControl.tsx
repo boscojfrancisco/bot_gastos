@@ -7,9 +7,10 @@ interface LiveVoiceControlProps {
   onAddExpense: (expense: any) => void;
   addMessage: (text: string, sender: 'user' | 'bot') => void;
   isVisible: boolean;
+  userName: string;
 }
 
-const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMessage, isVisible }) => {
+const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMessage, isVisible, userName }) => {
   const [isActive, setIsActive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const sessionRef = useRef<any>(null);
@@ -102,9 +103,10 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
           responseModalities: [Modality.AUDIO],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          systemInstruction: `Eres GastoBot Argentina. Tu misión es registrar gastos de casa y ocio. 
+          systemInstruction: `Eres GastoBot Argentina. Estás hablando con ${userName}. Tu misión es registrar gastos de casa y ocio. 
           Categorías: Luz, Agua, Internet, Hipoteca, Alquiler, Teléfono, Servicio Doméstico, Ocio, Restaurantes, Transporte, Otros.
-          Habla en español de Argentina de forma natural y breve. Confirma siempre el monto y la categoría. Si el monto es bajo (<100) pregunta si es correcto.`,
+          Habla en español de Argentina de forma natural y breve. Llámalo por su nombre (${userName}) de vez en cuando.
+          Confirma siempre el monto y la categoría. Si el monto es bajo (<100) pregunta si es correcto.`,
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
           }
@@ -125,7 +127,7 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
       {isActive && (
         <div className="bg-red-500 text-white px-5 py-2.5 rounded-[1.5rem] text-[10px] font-black shadow-2xl flex items-center gap-2 animate-pulse border-2 border-white/20 uppercase tracking-widest">
           <div className="w-2 h-2 bg-white rounded-full animate-ping"></div>
-          GastoBot Escuchando...
+          GastoBot escuchando a {userName}...
         </div>
       )}
       <button
