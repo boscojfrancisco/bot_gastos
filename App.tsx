@@ -1,10 +1,8 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Expense, ChatMessage } from './types';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import WhatsAppSimulator from './components/WhatsAppSimulator';
-import LiveVoiceControl from './components/LiveVoiceControl';
 import SettingsModal from './components/SettingsModal';
 
 const App: React.FC = () => {
@@ -38,7 +36,7 @@ const App: React.FC = () => {
         }
       ]);
     }
-  }, [userName]); // Dependencia userName para actualizar si cambia
+  }, [userName]);
 
   useEffect(() => {
     localStorage.setItem('expenses', JSON.stringify(expenses));
@@ -49,7 +47,6 @@ const App: React.FC = () => {
     const name = tempName.trim();
     localStorage.setItem('user_name', name);
     setUserName(name);
-    // Forzamos el mensaje inicial inmediatamente
     setMessages([
       {
         id: '1',
@@ -91,7 +88,6 @@ const App: React.FC = () => {
     }]);
   }, []);
 
-  // PANTALLA DE BIENVENIDA / ONBOARDING
   if (!userName) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#075e54] p-6 text-center">
@@ -147,13 +143,6 @@ const App: React.FC = () => {
           />
         )}
       </main>
-
-      <LiveVoiceControl 
-        onAddExpense={addExpense} 
-        addMessage={addMessage}
-        isVisible={activeTab === 'chat'}
-        userName={userName}
-      />
 
       {isSettingsOpen && (
         <SettingsModal 

@@ -1,7 +1,5 @@
 {
   "name": "Smart Expense Bot",
-  "description": "An intelligent expense tracker with WhatsApp-style chat interface and real-time voice integration using Gemini 2.5 Live API.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "description": "An intelligent expense tracker with WhatsApp-style chat interface and local/Sheets sync.",
+  "requestFramePermissions": []
 }
