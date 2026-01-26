@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { Expense } from "../types";
 
@@ -49,51 +48,55 @@ export async function processUserMessage(
   currentExpenses: Expense[],
   userName: string = "Amigo"
 ) {
-  // Fix: Obtained API key exclusively from process.env.API_KEY and assumed it's pre-configured
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const dayName = new Intl.DateTimeFormat('es-AR', { weekday: 'long' }).format(now);
 
   try {
-    // Fix: Initialize GoogleGenAI directly with process.env.API_KEY as per guidelines
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      // Fix: Use simple string for text contents as per guidelines
       contents: text,
       config: {
         tools: [{ functionDeclarations: [addExpenseTool, deleteExpenseTool, queryExpensesTool] }],
         systemInstruction: `Eres GastoBot Argentina. Usuario: ${userName}. Hoy: ${dayName} ${todayStr}. 
-        Misión: Ayudar a registrar gastos. Sé breve y usa emojis.`
+        Misión: Ayudar a registrar gastos. Sé breve y usa emojis. Si el usuario te pide borrar algo, busca en el historial que te proporciono.`
       },
     });
 
-    const call = response.candidates?.[0]?.content?.parts.find(p => p.functionCall);
+    // Usar la propiedad .functionCalls recomendada por la SDK para evitar errores de 'parts undefined'
+    const functionCalls = response.functionCalls;
     
-    if (call?.functionCall) {
-      const { name, args } = call.functionCall;
-      if (name === 'add_expense') return { type: 'ADD_EXPENSE', data: args };
+    if (functionCalls && functionCalls.length > 0) {
+      const { name, args } = functionCalls[0];
+      
+      if (name === 'add_expense') {
+        return { type: 'ADD_EXPENSE', data: args };
+      }
+      
       if (name === 'delete_expense') {
         const query = (args.searchQuery as string).toLowerCase();
         const toDelete = currentExpenses.find(e => 
-          e.description.toLowerCase().includes(query) || e.amount.toString() === query
+          e.description.toLowerCase().includes(query) || 
+          e.amount.toString() === query ||
+          e.category.toLowerCase().includes(query)
         );
         if (toDelete) return { type: 'DELETE_EXPENSE', id: toDelete.id, description: toDelete.description };
-        return { type: 'TEXT', text: `No encontré ese gasto para borrar, ${userName}.` };
+        return { type: 'TEXT', text: `No encontré ningún gasto que coincida con "${query}", ${userName}.` };
       }
+      
       if (name === 'get_expenses_history') {
         const summary = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
-            // Fix: Use simple string for text contents
-            contents: `Resumen de: ${JSON.stringify(currentExpenses)}`,
-            config: { systemInstruction: `Haz un resumen breve para ${userName}.` }
+            contents: `Genera un resumen muy breve de estos gastos para ${userName}: ${JSON.stringify(currentExpenses)}`,
+            config: { systemInstruction: "Responde como un asistente financiero argentino amable." }
         });
-        return { type: 'TEXT', text: summary.text };
+        return { type: 'TEXT', text: summary.text || "No tengo gastos registrados todavía." };
       }
     }
 
-    return { type: 'TEXT', text: response.text || "No pude procesar eso, ¿probamos de nuevo?" };
+    return { type: 'TEXT', text: response.text || "No entendí bien eso, ¿podrías repetirlo?" };
   } catch (error) {
     console.error("Gemini API Error:", error);
     const msg = error instanceof Error ? error.message : String(error);
@@ -101,10 +104,10 @@ export async function processUserMessage(
     if (msg.includes("fetch")) {
       return { 
         type: 'TEXT', 
-        text: "🔌 **Error de Red / Conexión**\n\nTu navegador no puede conectar con Google. Esto suele ser por un **AdBlocker** o extensiones de privacidad. Prueba desactivándolos o usa Modo Incógnito." 
+        text: "🔌 **Error de Conexión**\n\nNo pude contactar al servidor. Probá desactivando AdBlockers o revisando tu conexión a internet." 
       };
     }
     
-    return { type: 'TEXT', text: `⚠️ Error: ${msg}` };
+    return { type: 'TEXT', text: `⚠️ Ups, algo salió mal: ${msg}` };
   }
 }
