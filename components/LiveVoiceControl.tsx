@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { encode, decode, decodeAudioData } from '../services/audioUtils';
@@ -32,15 +33,10 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
   };
 
   const startSession = async () => {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      alert("Falta la API KEY en las variables de entorno. Configúrala en Vercel.");
-      return;
-    }
-
     setIsConnecting(true);
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      // Fix: Initialize GoogleGenAI directly using process.env.API_KEY as per initialization guidelines
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
@@ -64,6 +60,7 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
                 data: encode(new Uint8Array(int16.buffer)),
                 mimeType: 'audio/pcm;rate=16000',
               };
+              // Fix: Use sessionPromise to ensure data is sent only after connection is resolved, preventing race conditions
               sessionPromise.then(s => s.sendRealtimeInput({ media: pcmBlob }));
             };
             source.connect(processor);
@@ -91,17 +88,20 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
             }
 
             if (msg.serverContent?.turnComplete) {
-              if (currentInputRef.current.trim()) {
-                addMessage(currentInputRef.current.trim(), 'user');
+              // Fix: Extract transcription values to local variables before clearing references to avoid async update issues
+              const finalInput = currentInputRef.current.trim();
+              const finalOutput = currentOutputRef.current.trim();
+              if (finalInput) {
+                addMessage(finalInput, 'user');
               }
-              if (currentOutputRef.current.trim()) {
-                addMessage(currentOutputRef.current.trim(), 'bot');
+              if (finalOutput) {
+                addMessage(finalOutput, 'bot');
               }
               currentInputRef.current = '';
               currentOutputRef.current = '';
             }
           },
-          onerror: (e) => { console.error(e); stopSession(); alert("Error en conexión de voz (Gemini Live)."); },
+          onerror: (e) => { console.error('Live API Error:', e); stopSession(); },
           onclose: () => { setIsActive(false); setIsConnecting(false); }
         },
         config: {
@@ -120,9 +120,8 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
 
       sessionRef.current = await sessionPromise;
     } catch (err) {
-      console.error(err);
+      console.error('Failed to start Live session:', err);
       setIsConnecting(false);
-      alert("Error iniciando sesión de voz: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 

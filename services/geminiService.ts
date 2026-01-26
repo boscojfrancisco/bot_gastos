@@ -1,8 +1,6 @@
+
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { Expense } from "../types";
-
-// Ya no inicializamos fuera para evitar errores si falta la Key al cargar el archivo
-// const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const CATEGORIES = [
   'Luz', 'Agua', 'Internet', 'Hipoteca', 'Alquiler', 
@@ -19,7 +17,7 @@ const addExpenseTool: FunctionDeclaration = {
       amount: { type: Type.NUMBER, description: 'Monto en pesos argentinos' },
       category: { type: Type.STRING, description: 'Categoría', enum: CATEGORIES },
       description: { type: Type.STRING, description: 'Descripción breve' },
-      expenseDate: { type: Type.STRING, description: 'Fecha del gasto en formato YYYY-MM-DD. Si es hoy, usa la fecha actual.' },
+      expenseDate: { type: Type.STRING, description: 'Fecha del gasto en formato YYYY-MM-DD.' },
     },
     required: ['amount', 'category', 'description', 'expenseDate'],
   },
@@ -29,9 +27,9 @@ const deleteExpenseTool: FunctionDeclaration = {
   name: 'delete_expense',
   parameters: {
     type: Type.OBJECT,
-    description: 'Elimina un gasto existente buscando por descripción o monto.',
+    description: 'Elimina un gasto existente.',
     properties: {
-      searchQuery: { type: Type.STRING, description: 'Palabra clave o monto para identificar el gasto a borrar' },
+      searchQuery: { type: Type.STRING, description: 'Palabra clave' },
     },
     required: ['searchQuery'],
   },
@@ -41,7 +39,7 @@ const queryExpensesTool: FunctionDeclaration = {
   name: 'get_expenses_history',
   parameters: {
     type: Type.OBJECT,
-    description: 'Obtiene el historial para resúmenes temporales.',
+    description: 'Obtiene el historial para resúmenes.',
     properties: {},
   },
 };
@@ -51,43 +49,23 @@ export async function processUserMessage(
   currentExpenses: Expense[],
   userName: string = "Amigo"
 ) {
-  // Verificación explícita de la API Key
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    return { 
-      type: 'TEXT', 
-      text: "🔒 **Error de Configuración (API KEY)**\n\nNo encuentro tu clave de Gemini. Si estás en Vercel:\n\n1. Ve a **Settings > Environment Variables**.\n2. Agrega la clave con el nombre `API_KEY`.\n3. Ve a **Deployments**, haz click en los 3 puntos del último deploy y elige **Redeploy**." 
-    };
-  }
-
+  // Fix: Obtained API key exclusively from process.env.API_KEY and assumed it's pre-configured
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const dayName = new Intl.DateTimeFormat('es-AR', { weekday: 'long' }).format(now);
 
   try {
-    // Inicializamos aquí para asegurar que tenemos la key
-    const ai = new GoogleGenAI({ apiKey: apiKey });
-
+    // Fix: Initialize GoogleGenAI directly with process.env.API_KEY as per guidelines
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
-      contents: [{ role: 'user', parts: [{ text: `Usuario: ${text}` }] }],
+      model: "gemini-3-flash-preview",
+      // Fix: Use simple string for text contents as per guidelines
+      contents: text,
       config: {
         tools: [{ functionDeclarations: [addExpenseTool, deleteExpenseTool, queryExpensesTool] }],
-        systemInstruction: `Eres GastoBot Argentina. Estás hablando con ${userName}.
-        Hoy es ${dayName}, ${todayStr}.
-        
-        REGLAS DE FECHAS:
-        1. Si ${userName} dice "ayer", calcula la fecha restando 1 día a ${todayStr}.
-        2. Si dice "antes de ayer", resta 2 días.
-        3. Si menciona un día (ej: "el lunes") o una fecha (ej: "el 10 de marzo"), calcula el YYYY-MM-DD correspondiente.
-        4. Si NO menciona fecha, usa ${todayStr}.
-        
-        REGLAS DE MONTO:
-        - Si el monto es < 100, pregunta a ${userName} si es correcto antes de registrar.
-        
-        REGLAS DE RESPUESTA:
-        - Sé breve, amigable y usa emojis. Dirígete a ${userName} por su nombre ocasionalmente.
-        - Confirma siempre la fecha que entendiste.`
+        systemInstruction: `Eres GastoBot Argentina. Usuario: ${userName}. Hoy: ${dayName} ${todayStr}. 
+        Misión: Ayudar a registrar gastos. Sé breve y usa emojis.`
       },
     });
 
@@ -95,40 +73,38 @@ export async function processUserMessage(
     
     if (call?.functionCall) {
       const { name, args } = call.functionCall;
-      
-      if (name === 'add_expense') {
-        return { type: 'ADD_EXPENSE', data: args };
-      }
-      
+      if (name === 'add_expense') return { type: 'ADD_EXPENSE', data: args };
       if (name === 'delete_expense') {
         const query = (args.searchQuery as string).toLowerCase();
         const toDelete = currentExpenses.find(e => 
-          e.description.toLowerCase().includes(query) || 
-          e.amount.toString() === query ||
-          e.category.toLowerCase().includes(query)
+          e.description.toLowerCase().includes(query) || e.amount.toString() === query
         );
         if (toDelete) return { type: 'DELETE_EXPENSE', id: toDelete.id, description: toDelete.description };
-        return { type: 'TEXT', text: `No encontré ningún gasto que coincida con "${args.searchQuery}", ${userName}.` };
+        return { type: 'TEXT', text: `No encontré ese gasto para borrar, ${userName}.` };
       }
-      
       if (name === 'get_expenses_history') {
-        const summaryResponse = await ai.models.generateContent({
-            model: "gemini-3-pro-preview",
-            contents: [{ role: 'user', parts: [{ text: `Gastos: ${JSON.stringify(currentExpenses)}. Pregunta: ${text}. Fecha actual: ${todayStr}` }] }],
-            config: {
-                systemInstruction: `Analiza los gastos para ${userName}. Calcula totales por periodo. Sé visual y usa negritas.`
-            }
+        const summary = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            // Fix: Use simple string for text contents
+            contents: `Resumen de: ${JSON.stringify(currentExpenses)}`,
+            config: { systemInstruction: `Haz un resumen breve para ${userName}.` }
         });
-        return { type: 'TEXT', text: summaryResponse.text };
+        return { type: 'TEXT', text: summary.text };
       }
     }
 
-    return { type: 'TEXT', text: response.text || `No entendí del todo, ${userName}, ¿me lo repetís?` };
+    return { type: 'TEXT', text: response.text || "No pude procesar eso, ¿probamos de nuevo?" };
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return { 
-      type: 'TEXT', 
-      text: `⚠️ **Error de Conexión**\n\n${error instanceof Error ? error.message : String(error)}\n\nSi ves "API key not valid" o similar, revisa que la clave en Vercel sea correcta y hayas hecho Redeploy.` 
-    };
+    const msg = error instanceof Error ? error.message : String(error);
+    
+    if (msg.includes("fetch")) {
+      return { 
+        type: 'TEXT', 
+        text: "🔌 **Error de Red / Conexión**\n\nTu navegador no puede conectar con Google. Esto suele ser por un **AdBlocker** o extensiones de privacidad. Prueba desactivándolos o usa Modo Incógnito." 
+      };
+    }
+    
+    return { type: 'TEXT', text: `⚠️ Error: ${msg}` };
   }
 }
