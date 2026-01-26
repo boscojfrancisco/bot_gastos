@@ -1,8 +1,8 @@
-
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import { Expense } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Ya no inicializamos fuera para evitar errores si falta la Key al cargar el archivo
+// const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const CATEGORIES = [
   'Luz', 'Agua', 'Internet', 'Hipoteca', 'Alquiler', 
@@ -51,11 +51,23 @@ export async function processUserMessage(
   currentExpenses: Expense[],
   userName: string = "Amigo"
 ) {
+  // Verificación explícita de la API Key
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    return { 
+      type: 'TEXT', 
+      text: "🔒 **Error de Configuración (API KEY)**\n\nNo encuentro tu clave de Gemini. Si estás en Vercel:\n\n1. Ve a **Settings > Environment Variables**.\n2. Agrega la clave con el nombre `API_KEY`.\n3. Ve a **Deployments**, haz click en los 3 puntos del último deploy y elige **Redeploy**." 
+    };
+  }
+
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const dayName = new Intl.DateTimeFormat('es-AR', { weekday: 'long' }).format(now);
 
   try {
+    // Inicializamos aquí para asegurar que tenemos la key
+    const ai = new GoogleGenAI({ apiKey: apiKey });
+
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: [{ role: 'user', parts: [{ text: `Usuario: ${text}` }] }],
@@ -113,6 +125,10 @@ export async function processUserMessage(
 
     return { type: 'TEXT', text: response.text || `No entendí del todo, ${userName}, ¿me lo repetís?` };
   } catch (error) {
-    return { type: 'TEXT', text: "Hubo un problema. ¿Podés intentar de nuevo?" };
+    console.error("Gemini API Error:", error);
+    return { 
+      type: 'TEXT', 
+      text: `⚠️ **Error de Conexión**\n\n${error instanceof Error ? error.message : String(error)}\n\nSi ves "API key not valid" o similar, revisa que la clave en Vercel sea correcta y hayas hecho Redeploy.` 
+    };
   }
 }

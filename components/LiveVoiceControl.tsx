@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { encode, decode, decodeAudioData } from '../services/audioUtils';
@@ -33,9 +32,15 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
   };
 
   const startSession = async () => {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      alert("Falta la API KEY en las variables de entorno. Configúrala en Vercel.");
+      return;
+    }
+
     setIsConnecting(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
@@ -96,7 +101,7 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
               currentOutputRef.current = '';
             }
           },
-          onerror: (e) => { console.error(e); stopSession(); },
+          onerror: (e) => { console.error(e); stopSession(); alert("Error en conexión de voz (Gemini Live)."); },
           onclose: () => { setIsActive(false); setIsConnecting(false); }
         },
         config: {
@@ -117,6 +122,7 @@ const LiveVoiceControl: React.FC<LiveVoiceControlProps> = ({ onAddExpense, addMe
     } catch (err) {
       console.error(err);
       setIsConnecting(false);
+      alert("Error iniciando sesión de voz: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
