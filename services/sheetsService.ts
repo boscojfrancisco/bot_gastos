@@ -1,6 +1,7 @@
+import { Expense, Category } from "../types";
 
 export interface SheetExpense {
-  id: string; // ID es obligatorio ahora para sincronizar
+  id: string;
   amount: number;
   category: string;
   description: string;
@@ -8,13 +9,39 @@ export interface SheetExpense {
 }
 
 export const sheetsService = {
+  async fetchExpenses(url: string): Promise<Expense[]> {
+    try {
+      // Usamos POST con acción 'list' para obtener los datos
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'list' }),
+      });
+      
+      const data = await response.json();
+      if (data.status === 'success' && Array.isArray(data.data)) {
+        return data.data.map((item: any) => ({
+          id: item.id,
+          amount: Number(item.amount),
+          category: item.category as Category,
+          description: item.description,
+          expenseDate: item.expenseDate,
+          entryDate: item.entryDate || new Date().toISOString()
+        }));
+      }
+      return [];
+    } catch (error) {
+      console.error("Error fetching from Sheets:", error);
+      throw new Error("No se pudo conectar con el Google Sheet. Verifica la URL.");
+    }
+  },
+
   async addExpense(url: string, expense: SheetExpense) {
     try {
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
-        // Enviamos action: 'add' y el ID
         body: JSON.stringify({ action: 'add', ...expense }),
       });
       return { success: true };
@@ -30,7 +57,6 @@ export const sheetsService = {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
-        // Enviamos action: 'delete' y el ID a borrar
         body: JSON.stringify({ action: 'delete', id: id }),
       });
       return { success: true };

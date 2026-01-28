@@ -4,10 +4,14 @@ import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import WhatsAppSimulator from './components/WhatsAppSimulator';
 import SettingsModal from './components/SettingsModal';
+import { sheetsService } from './services/sheetsService';
 
 const App: React.FC = () => {
   const [userName, setUserName] = useState<string>(localStorage.getItem('user_name') || '');
   const [tempName, setTempName] = useState('');
+  const [tempUrl, setTempUrl] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'chat'>('chat');
@@ -16,48 +20,77 @@ const App: React.FC = () => {
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  // Efecto para cargar gastos y configurar el mensaje inicial
+  // Cargar datos del sheet si la URL ya existe al iniciar
   useEffect(() => {
-    const savedExpenses = localStorage.getItem('expenses');
-    if (savedExpenses) {
-      try {
-        setExpenses(JSON.parse(savedExpenses));
-      } catch (e) { console.error(e); }
+    if (sheetUrl && expenses.length === 0) {
+      syncFromSheet(sheetUrl);
+    }
+  }, [sheetUrl]);
+
+  const syncFromSheet = async (url: string) => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const data = await sheetsService.fetchExpenses(url);
+      setExpenses(data);
+      if (userName && messages.length === 0) {
+        setMessages([
+          {
+            id: '1',
+            text: `¡Hola ${userName}! 👋 He cargado tus ${data.length} gastos del historial.\n\nSoy GastoBot Argentina 🇦🇷. ¿Qué registramos hoy?`,
+            sender: 'bot',
+            timestamp: new Date()
+          }
+        ]);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError('La URL de Google Sheets no es válida o el Script no está configurado correctamente.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInitialSetup = async () => {
+    if (!tempUrl.trim()) {
+      setError('La URL de Google Sheets es obligatoria.');
+      return;
     }
 
-    // Solo establecer el mensaje inicial si ya tenemos nombre
-    if (userName && messages.length === 0) {
+    const name = (tempName || 'Usuario').trim();
+    const url = tempUrl.trim();
+
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      const data = await sheetsService.fetchExpenses(url);
+      localStorage.setItem('user_name', name);
+      localStorage.setItem('sheet_url', url);
+      setUserName(name);
+      setSheetUrl(url);
+      setExpenses(data);
       setMessages([
         {
           id: '1',
-          text: `¡Hola ${userName}! 👋 Soy GastoBot Argentina 🇦🇷\n\nPodés decirme "Gaste 5000 en pizza hoy" o "Ayer gasté 3000 en taxi".`,
+          text: `¡Bienvenido ${name}! 👋 Sincronización exitosa con Google Sheets.\n\nHe recuperado ${data.length} registros anteriores.`,
           sender: 'bot',
           timestamp: new Date()
         }
       ]);
+    } catch (err) {
+      setError('No se pudo conectar con el Sheet. Asegurate de haber publicado el Script como Web App accesible por "Cualquiera".');
+    } finally {
+      setIsLoading(false);
     }
-  }, [userName]);
-
-  useEffect(() => {
-    localStorage.setItem('expenses', JSON.stringify(expenses));
-  }, [expenses]);
-
-  const handleNameSubmit = () => {
-    if (!tempName.trim()) return;
-    const name = tempName.trim();
-    localStorage.setItem('user_name', name);
-    setUserName(name);
-    setMessages([
-      {
-        id: '1',
-        text: `¡Hola ${name}! 👋 Soy GastoBot Argentina 🇦🇷\n\nPodés decirme "Gaste 5000 en pizza hoy" o "Ayer gasté 3000 en taxi".`,
-        sender: 'bot',
-        timestamp: new Date()
-      }
-    ]);
   };
 
-  const saveSheetUrl = (url: string) => {
+  const saveSheetUrl = async (url: string) => {
+    if (url === sheetUrl) {
+      setIsSettingsOpen(false);
+      return;
+    }
+    await syncFromSheet(url);
     setSheetUrl(url);
     localStorage.setItem('sheet_url', url);
     setIsSettingsOpen(false);
@@ -88,33 +121,52 @@ const App: React.FC = () => {
     }]);
   }, []);
 
-  if (!userName) {
+  // Pantalla de configuración inicial obligatoria
+  if (!userName || !sheetUrl) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#075e54] p-6 text-center">
         <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm animate-fade-in">
-          <div className="text-5xl mb-4">👋</div>
-          <h1 className="text-2xl font-black text-gray-800 mb-2">¡Bienvenido!</h1>
-          <p className="text-gray-500 mb-6 text-sm">Para empezar, ¿cómo te gustaría que te llame?</p>
+          <div className="text-5xl mb-4">☁️</div>
+          <h1 className="text-2xl font-black text-gray-800 mb-2">Conectar Base de Datos</h1>
+          <p className="text-gray-500 mb-6 text-sm font-medium">Configurá tu Google Sheets para guardar y sincronizar tus gastos permanentemente.</p>
           
-          <input 
-            type="text" 
-            placeholder="Tu nombre (ej: Juan)"
-            value={tempName}
-            onChange={(e) => setTempName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
-            autoFocus
-            className="w-full bg-gray-100 border-2 border-transparent focus:border-emerald-500 focus:bg-white rounded-xl px-4 py-3 text-lg font-bold text-gray-800 outline-none transition-all mb-4 text-center"
-          />
-          
-          <button 
-            onClick={handleNameSubmit}
-            disabled={!tempName.trim()}
-            className="w-full bg-[#075e54] text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
-          >
-            COMENZAR
-          </button>
+          <div className="space-y-4">
+            <input 
+              type="text" 
+              placeholder="Tu nombre"
+              value={tempName}
+              onChange={(e) => setTempName(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-gray-100 focus:border-emerald-500 focus:bg-white rounded-xl px-4 py-3 text-sm font-bold text-gray-800 outline-none transition-all"
+            />
+            
+            <input 
+              type="text" 
+              placeholder="URL Web App (Apps Script)"
+              value={tempUrl}
+              onChange={(e) => setTempUrl(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-gray-100 focus:border-emerald-500 focus:bg-white rounded-xl px-4 py-3 text-sm font-bold text-gray-800 outline-none transition-all"
+            />
+
+            {error && <p className="text-red-500 text-[11px] font-bold bg-red-50 p-2 rounded-lg">{error}</p>}
+            
+            <button 
+              onClick={handleInitialSetup}
+              disabled={isLoading}
+              className="w-full bg-[#075e54] text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-emerald-800 transition-all active:scale-95 disabled:opacity-50"
+            >
+              {isLoading ? 'SINCRONIZANDO...' : 'VINCULAR Y ENTRAR'}
+            </button>
+            
+            <a 
+               href="https://docs.google.com/spreadsheets/u/0/create" 
+               target="_blank" 
+               className="block text-[10px] text-emerald-600 font-bold hover:underline"
+            >
+              ¿Cómo crear mi Google Sheet?
+            </a>
+          </div>
         </div>
-        <p className="mt-8 text-emerald-200/60 text-xs font-medium">GastoBot Argentina 🇦🇷</p>
+        <p className="mt-8 text-emerald-200/60 text-xs font-medium">GastoBot Argentina 🇦🇷 v2.0</p>
       </div>
     );
   }
@@ -130,7 +182,15 @@ const App: React.FC = () => {
       
       <main className="flex-1 overflow-hidden relative bg-gray-50">
         {activeTab === 'dashboard' ? (
-          <Dashboard expenses={expenses} onDelete={deleteExpense} />
+          <Dashboard 
+            expenses={expenses} 
+            onDelete={async (id) => {
+               if (window.confirm("¿Estás seguro de que querés borrar este gasto? Se eliminará permanentemente de Google Sheets.")) {
+                  deleteExpense(id);
+                  if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, id);
+               }
+            }} 
+          />
         ) : (
           <WhatsAppSimulator 
             messages={messages} 
@@ -150,6 +210,13 @@ const App: React.FC = () => {
           onSave={saveSheetUrl} 
           onClose={() => setIsSettingsOpen(false)} 
         />
+      )}
+
+      {isLoading && (
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-[100] flex flex-col items-center justify-center">
+            <div className="w-12 h-12 border-4 border-[#075e54] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-[#075e54] font-black text-sm animate-pulse">SINCRONIZANDO CON SHEETS...</p>
+        </div>
       )}
     </div>
   );
