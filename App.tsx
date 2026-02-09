@@ -12,6 +12,7 @@ const App: React.FC = () => {
   const [tempUrl, setTempUrl] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showConfigHelp, setShowConfigHelp] = useState(false);
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'chat'>('chat');
@@ -20,7 +21,7 @@ const App: React.FC = () => {
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  // Cargar datos del sheet si la URL ya existe al iniciar
+  // Sincronización automática al cargar si hay URL
   useEffect(() => {
     if (sheetUrl && expenses.length === 0) {
       syncFromSheet(sheetUrl);
@@ -37,7 +38,7 @@ const App: React.FC = () => {
         setMessages([
           {
             id: '1',
-            text: `¡Hola ${userName}! 👋 He cargado tus ${data.length} gastos del historial.\n\nSoy GastoBot Argentina 🇦🇷. ¿Qué registramos hoy?`,
+            text: `¡Hola de nuevo ${userName}! 👋 He recuperado tus ${data.length} gastos del historial.\n\n¿Qué registramos hoy?`,
             sender: 'bot',
             timestamp: new Date()
           }
@@ -45,7 +46,7 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError('La URL de Google Sheets no es válida o el Script no está configurado correctamente.');
+      setError(err.message || 'Error de conexión con Sheets.');
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +54,7 @@ const App: React.FC = () => {
 
   const handleInitialSetup = async () => {
     if (!tempUrl.trim()) {
-      setError('La URL de Google Sheets es obligatoria.');
+      setError('La URL de Google Sheets es obligatoria para funcionar.');
       return;
     }
 
@@ -65,21 +66,24 @@ const App: React.FC = () => {
     
     try {
       const data = await sheetsService.fetchExpenses(url);
+      
       localStorage.setItem('user_name', name);
       localStorage.setItem('sheet_url', url);
+      
       setUserName(name);
       setSheetUrl(url);
       setExpenses(data);
+      
       setMessages([
         {
           id: '1',
-          text: `¡Bienvenido ${name}! 👋 Sincronización exitosa con Google Sheets.\n\nHe recuperado ${data.length} registros anteriores.`,
+          text: `¡Configuración exitosa! 👋\n\nHe sincronizado ${data.length} registros anteriores de tu base de datos.`,
           sender: 'bot',
           timestamp: new Date()
         }
       ]);
-    } catch (err) {
-      setError('No se pudo conectar con el Sheet. Asegurate de haber publicado el Script como Web App accesible por "Cualquiera".');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -108,9 +112,28 @@ const App: React.FC = () => {
     setExpenses(prev => [expense, ...prev]);
   }, []);
 
-  const deleteExpense = useCallback((id: string) => {
+  const deleteExpenseState = useCallback((id: string) => {
     setExpenses(prev => prev.filter(e => e.id !== id));
   }, []);
+
+  const handleDeleteExpense = useCallback(async (id: string) => {
+    const gasto = expenses.find(e => e.id === id);
+    if (!gasto) return;
+
+    if (window.confirm(`¿Seguro que querés borrar "${gasto.description}"?\nEsto eliminará el registro permanentemente.`)) {
+      // Borrado optimista en la UI
+      deleteExpenseState(id);
+      
+      // Borrado en la nube
+      if (sheetUrl) {
+        try {
+          await sheetsService.deleteExpense(sheetUrl, id);
+        } catch (err) {
+          console.error("Error al borrar en Sheets:", err);
+        }
+      }
+    }
+  }, [expenses, sheetUrl, deleteExpenseState]);
 
   const addMessage = useCallback((text: string, sender: 'user' | 'bot') => {
     setMessages(prev => [...prev, {
@@ -121,52 +144,75 @@ const App: React.FC = () => {
     }]);
   }, []);
 
-  // Pantalla de configuración inicial obligatoria
   if (!userName || !sheetUrl) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#075e54] p-6 text-center">
-        <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm animate-fade-in">
-          <div className="text-5xl mb-4">☁️</div>
-          <h1 className="text-2xl font-black text-gray-800 mb-2">Conectar Base de Datos</h1>
-          <p className="text-gray-500 mb-6 text-sm font-medium">Configurá tu Google Sheets para guardar y sincronizar tus gastos permanentemente.</p>
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm animate-fade-in border-4 border-emerald-500/10">
+          <div className="text-5xl mb-4">🇦🇷</div>
+          <h1 className="text-2xl font-black text-gray-800 mb-1 tracking-tighter">GASTOBOT CLOUD</h1>
+          <p className="text-gray-400 mb-8 text-[11px] font-bold uppercase tracking-widest">Sincronización Total con Sheets</p>
           
           <div className="space-y-4">
-            <input 
-              type="text" 
-              placeholder="Tu nombre"
-              value={tempName}
-              onChange={(e) => setTempName(e.target.value)}
-              className="w-full bg-gray-50 border-2 border-gray-100 focus:border-emerald-500 focus:bg-white rounded-xl px-4 py-3 text-sm font-bold text-gray-800 outline-none transition-all"
-            />
-            
-            <input 
-              type="text" 
-              placeholder="URL Web App (Apps Script)"
-              value={tempUrl}
-              onChange={(e) => setTempUrl(e.target.value)}
-              className="w-full bg-gray-50 border-2 border-gray-100 focus:border-emerald-500 focus:bg-white rounded-xl px-4 py-3 text-sm font-bold text-gray-800 outline-none transition-all"
-            />
+            <div className="space-y-1 text-left">
+               <label className="text-[10px] font-black text-slate-400 px-2 uppercase">Tu Nombre</label>
+               <input 
+                 type="text" 
+                 placeholder="Ej: Juan"
+                 value={tempName}
+                 onChange={(e) => setTempName(e.target.value)}
+                 className="w-full bg-slate-50 border-2 border-slate-100 focus:border-emerald-500 focus:bg-white rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none transition-all"
+               />
+            </div>
 
-            {error && <p className="text-red-500 text-[11px] font-bold bg-red-50 p-2 rounded-lg">{error}</p>}
+            <div className="space-y-1 text-left">
+               <label className="text-[10px] font-black text-slate-400 px-2 uppercase">URL de tu Apps Script</label>
+               <input 
+                 type="text" 
+                 placeholder="https://script.google.com/macros/s/..."
+                 value={tempUrl}
+                 onChange={(e) => setTempUrl(e.target.value)}
+                 className="w-full bg-slate-50 border-2 border-slate-100 focus:border-emerald-500 focus:bg-white rounded-2xl px-4 py-3 text-[12px] font-bold text-slate-800 outline-none transition-all"
+               />
+            </div>
+
+            {error && (
+              <div className="bg-red-50 p-3 rounded-xl border border-red-100">
+                <p className="text-red-500 text-[10px] font-black leading-tight">{error}</p>
+              </div>
+            )}
             
             <button 
               onClick={handleInitialSetup}
               disabled={isLoading}
-              className="w-full bg-[#075e54] text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-emerald-800 transition-all active:scale-95 disabled:opacity-50"
+              className="w-full bg-[#075e54] text-white font-black py-4 rounded-2xl shadow-xl hover:bg-emerald-800 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isLoading ? 'SINCRONIZANDO...' : 'VINCULAR Y ENTRAR'}
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  CONECTANDO...
+                </>
+              ) : 'VINCULAR MI CUENTA'}
             </button>
             
-            <a 
-               href="https://docs.google.com/spreadsheets/u/0/create" 
-               target="_blank" 
-               className="block text-[10px] text-emerald-600 font-bold hover:underline"
+            <button 
+               onClick={() => setShowConfigHelp(true)}
+               className="text-[10px] text-emerald-600 font-black hover:underline tracking-widest uppercase"
             >
-              ¿Cómo crear mi Google Sheet?
-            </a>
+              ¿Cómo obtener mi URL?
+            </button>
           </div>
         </div>
-        <p className="mt-8 text-emerald-200/60 text-xs font-medium">GastoBot Argentina 🇦🇷 v2.0</p>
+        
+        {showConfigHelp && (
+          <SettingsModal 
+            currentUrl="" 
+            onSave={() => {}} 
+            onClose={() => setShowConfigHelp(false)} 
+            instructionsOnly={true}
+          />
+        )}
+        
+        <p className="mt-8 text-emerald-200/40 text-[10px] font-bold tracking-[0.2em] uppercase italic">Powered by Gemini 2.5 & Google Cloud</p>
       </div>
     );
   }
@@ -177,26 +223,21 @@ const App: React.FC = () => {
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         onOpenSettings={() => setIsSettingsOpen(true)}
-        isSinking={!!sheetUrl}
+        isSinking={true}
       />
       
       <main className="flex-1 overflow-hidden relative bg-gray-50">
         {activeTab === 'dashboard' ? (
           <Dashboard 
             expenses={expenses} 
-            onDelete={async (id) => {
-               if (window.confirm("¿Estás seguro de que querés borrar este gasto? Se eliminará permanentemente de Google Sheets.")) {
-                  deleteExpense(id);
-                  if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, id);
-               }
-            }} 
+            onDelete={handleDeleteExpense} 
           />
         ) : (
           <WhatsAppSimulator 
             messages={messages} 
             addMessage={addMessage} 
             onAddExpense={addExpense}
-            onDeleteExpense={deleteExpense}
+            onDeleteExpense={deleteExpenseState}
             currentExpenses={expenses}
             sheetUrl={sheetUrl}
             userName={userName}
@@ -213,9 +254,9 @@ const App: React.FC = () => {
       )}
 
       {isLoading && (
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-[100] flex flex-col items-center justify-center">
-            <div className="w-12 h-12 border-4 border-[#075e54] border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-[#075e54] font-black text-sm animate-pulse">SINCRONIZANDO CON SHEETS...</p>
+        <div className="absolute inset-0 bg-white/40 backdrop-blur-md z-[100] flex flex-col items-center justify-center">
+            <div className="w-14 h-14 border-4 border-[#075e54] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-[#075e54] font-black text-xs tracking-widest animate-pulse">SINCRONIZANDO NUBE...</p>
         </div>
       )}
     </div>

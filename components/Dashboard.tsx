@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Expense } from '../types';
@@ -69,9 +68,13 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onDelete }) => {
           <div className="space-y-3">
             <h3 className="font-bold text-gray-800 px-2 text-lg">Historial de Gastos</h3>
             {expenses.map(expense => (
-              <div key={expense.id} className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border-l-4" style={{ borderColor: CATEGORY_COLORS[expense.category] }}>
-                <div className="flex-1">
-                  <p className="font-bold text-gray-800">{expense.description}</p>
+              <div 
+                key={expense.id} 
+                className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border-l-4 relative overflow-hidden transition-all" 
+                style={{ borderColor: CATEGORY_COLORS[expense.category] }}
+              >
+                <div className="flex-1 pr-4">
+                  <p className="font-bold text-gray-800 line-clamp-1">{expense.description}</p>
                   <div className="flex gap-2 mt-1">
                     <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
                       {expense.category}
@@ -81,13 +84,31 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onDelete }) => {
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="font-black text-lg text-gray-800">-${expense.amount.toLocaleString()}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-black text-lg text-gray-800 whitespace-nowrap">-${expense.amount.toLocaleString()}</span>
                   <button 
-                    onClick={() => onDelete(expense.id)}
-                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 text-red-300 hover:text-red-500 transition-colors"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(expense.id);
+                    }}
+                    className="w-11 h-11 flex items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-500 hover:text-white active:scale-90 transition-all shadow-sm"
+                    aria-label="Borrar gasto"
                   >
-                    ✕
+                    <svg 
+                      className="pointer-events-none"
+                      viewBox="0 0 24 24" 
+                      width="20" 
+                      height="20" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
                   </button>
                 </div>
               </div>

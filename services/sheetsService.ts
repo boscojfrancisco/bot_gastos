@@ -11,17 +11,23 @@ export interface SheetExpense {
 export const sheetsService = {
   async fetchExpenses(url: string): Promise<Expense[]> {
     try {
-      // Usamos POST con acción 'list' para obtener los datos
+      // Usamos un timeout para evitar esperas infinitas
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'list' }),
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
       const data = await response.json();
+      
       if (data.status === 'success' && Array.isArray(data.data)) {
         return data.data.map((item: any) => ({
-          id: item.id,
+          id: item.id || crypto.randomUUID(),
           amount: Number(item.amount),
           category: item.category as Category,
           description: item.description,
@@ -32,7 +38,7 @@ export const sheetsService = {
       return [];
     } catch (error) {
       console.error("Error fetching from Sheets:", error);
-      throw new Error("No se pudo conectar con el Google Sheet. Verifica la URL.");
+      throw new Error("No se pudo conectar con el Google Sheet. Verificá que el Script esté publicado como 'Web App' y con acceso para 'Cualquiera'.");
     }
   },
 
@@ -40,8 +46,8 @@ export const sheetsService = {
     try {
       await fetch(url, {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        mode: 'no-cors', // Importante para evitar problemas de CORS en escrituras simples
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'add', ...expense }),
       });
       return { success: true };
@@ -56,7 +62,7 @@ export const sheetsService = {
       await fetch(url, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'delete', id: id }),
       });
       return { success: true };

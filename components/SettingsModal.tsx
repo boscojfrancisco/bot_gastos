@@ -4,9 +4,10 @@ interface SettingsModalProps {
   currentUrl: string;
   onSave: (url: string) => void;
   onClose: () => void;
+  instructionsOnly?: boolean;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, onSave, onClose }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, onSave, onClose, instructionsOnly = false }) => {
   const [url, setUrl] = useState(currentUrl);
   const [copied, setCopied] = useState(false);
 
@@ -23,14 +24,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, onSave, onClo
   
   var action = payload.action || 'add'; 
   
-  // Configuración de encabezados si está vacía
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(["F. REGISTRO", "F. GASTO", "HORA REG.", "MONTO ($)", "CATEGORÍA", "DESCRIPCIÓN", "ID"]);
     sheet.getRange("1:1").setBackground("#075e54").setFontColor("white").setFontWeight("bold");
     sheet.setFrozenRows(1);
   }
 
-  // ACCIÓN: LISTAR GASTOS
   if (action === 'list') {
     var data = sheet.getDataRange().getValues();
     var expenses = [];
@@ -48,7 +47,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, onSave, onClo
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // ACCIÓN: BORRAR GASTO
   if (action === 'delete') {
     var idToDelete = payload.id;
     var data = sheet.getDataRange().getValues();
@@ -63,12 +61,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, onSave, onClo
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // ACCIÓN: AGREGAR GASTO
   var now = new Date();
   var timezone = Session.getScriptTimeZone();
   var fechaRegistro = Utilities.formatDate(now, timezone, "dd/MM/yyyy");
   var horaRegistro = Utilities.formatDate(now, timezone, "HH:mm:ss");
-  
   var fGasto = payload.expenseDate.split('-');
   var fechaGastoFormateada = fGasto[2] + '/' + fGasto[1] + '/' + fGasto[0];
   
@@ -85,10 +81,8 @@ function convertDateToIso(googleDate) {
   var month = '' + (d.getMonth() + 1);
   var day = '' + d.getDate();
   var year = d.getFullYear();
-
   if (month.length < 2) month = '0' + month;
   if (day.length < 2) day = '0' + day;
-
   return [year, month, day].join('-');
 }`;
 
@@ -99,12 +93,12 @@ function convertDateToIso(googleDate) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="bg-[#075e54] p-6 text-white flex justify-between items-center">
           <div>
-            <h2 className="text-xl font-black">Sincronización Total</h2>
-            <p className="text-emerald-100/70 text-xs">Tu Google Sheet es ahora tu base de datos central</p>
+            <h2 className="text-xl font-black italic tracking-tighter">CONFIGURACIÓN BASE DE DATOS</h2>
+            <p className="text-emerald-100/70 text-[10px] font-bold uppercase tracking-widest">Sigue estos pasos para conectar tu nube</p>
           </div>
           <button onClick={onClose} className="hover:bg-white/10 p-2 rounded-full transition-colors">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
@@ -112,44 +106,45 @@ function convertDateToIso(googleDate) {
         </div>
         
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">URL Web App (Base de Datos)</label>
-            <input 
-              type="text" 
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="Pega la URL de Apps Script aquí..."
-              className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-4 text-sm font-bold text-slate-900 focus:border-[#075e54] focus:ring-0 outline-none transition-all placeholder-slate-300"
-            />
-          </div>
+          {!instructionsOnly && (
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Tu URL Actual de Apps Script</label>
+              <input 
+                type="text" 
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://script.google.com/..."
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-[12px] font-bold text-slate-900 focus:border-[#075e54] outline-none transition-all"
+              />
+            </div>
+          )}
           
-          <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
+          <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800">
             <div className="flex justify-between items-center mb-4">
-              <span className="text-emerald-400 font-bold text-[10px] tracking-widest">SISTEMA V3.0 (OBLIGATORIO)</span>
+              <span className="text-emerald-400 font-black text-[10px] tracking-widest uppercase">CÓDIGO APPS SCRIPT (v4.0)</span>
               <button 
                 onClick={copyToClipboard}
-                className={`text-[10px] px-3 py-1.5 rounded-lg font-bold transition-all ${
-                  copied ? 'bg-emerald-500 text-white' : 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20'
+                className={`text-[10px] px-4 py-2 rounded-xl font-black transition-all ${
+                  copied ? 'bg-emerald-500 text-white' : 'bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20 shadow-sm'
                 }`}
               >
                 {copied ? '¡COPIADO!' : 'COPIAR CÓDIGO'}
               </button>
             </div>
-            <pre className="text-[10px] leading-relaxed text-emerald-50/80 font-mono overflow-x-auto p-3 bg-black/40 rounded-lg scrollbar-hide">
+            <pre className="text-[10px] leading-relaxed text-emerald-50/70 font-mono overflow-x-auto p-4 bg-black/40 rounded-xl scrollbar-hide border border-white/5">
               {scriptCode}
             </pre>
-            <p className="text-[10px] text-yellow-400 mt-2 font-bold bg-yellow-900/20 p-2 rounded">
-              ⚠️ NUEVO: Este script permite recuperar tu historial al cambiar de dispositivo. Actualizalo en Apps Script.
-            </p>
           </div>
 
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-            <h4 className="text-blue-900 font-black text-[10px] uppercase tracking-widest mb-3">Requisitos:</h4>
-            <ol className="text-[11px] text-blue-800 space-y-2 list-decimal list-inside font-medium">
-              <li>Reemplaza el código anterior en Apps Script.</li>
-              <li>Implementar → Gestionar implementaciones.</li>
-              <li>Edita la implementación actual → Nueva Versión.</li>
-              <li>Asegura que dice: "Quién tiene acceso: Cualquiera".</li>
+          <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+            <h4 className="text-blue-900 font-black text-[10px] uppercase tracking-widest mb-4">PASOS DE INSTALACIÓN:</h4>
+            <ol className="text-[11px] text-blue-800 space-y-3 list-decimal list-inside font-bold">
+              <li>Crea un Google Sheet y ve a <span className="underline">Extensiones → Apps Script</span>.</li>
+              <li>Pega el código de arriba borrando todo lo anterior.</li>
+              <li>Dale a <span className="bg-blue-100 px-1 rounded">Implementar → Nueva implementación</span>.</li>
+              <li>Tipo: <span className="font-black">Aplicación Web</span>.</li>
+              <li>Quién tiene acceso: <span className="text-red-600 font-black italic underline uppercase">Cualquiera</span>.</li>
+              <li>Copia la <span className="font-black italic underline uppercase">URL de Aplicación Web</span> y pégala aquí.</li>
             </ol>
           </div>
         </div>
@@ -157,16 +152,18 @@ function convertDateToIso(googleDate) {
         <div className="p-6 bg-slate-50 flex gap-3">
           <button 
             onClick={onClose}
-            className="flex-1 py-3 text-slate-400 font-bold text-sm"
+            className="flex-1 py-4 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600 transition-colors"
           >
-            CANCELAR
+            CERRAR
           </button>
-          <button 
-            onClick={() => onSave(url)}
-            className="flex-2 px-8 py-3 bg-[#075e54] text-white font-black text-sm rounded-xl shadow-lg hover:bg-emerald-800 transition-all active:scale-95"
-          >
-            SINCRONIZAR Y GUARDAR
-          </button>
+          {!instructionsOnly && (
+            <button 
+              onClick={() => onSave(url)}
+              className="flex-[2] py-4 bg-[#075e54] text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl hover:bg-emerald-800 transition-all active:scale-95"
+            >
+              SINCRONIZAR CAMBIOS
+            </button>
+          )}
         </div>
       </div>
     </div>
