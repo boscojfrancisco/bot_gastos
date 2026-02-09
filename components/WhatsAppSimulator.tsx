@@ -1,8 +1,8 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, Expense } from '../types';
 import { processUserMessage } from '../services/geminiService';
 import { sheetsService } from '../services/sheetsService';
+import { GoogleGenAI } from "@google/genai";
 
 interface WhatsAppSimulatorProps {
   messages: ChatMessage[];
@@ -34,42 +34,80 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
     setIsProcessing(true);
 
     try {
-      // Pasamos el userName aquí
       const result = await processUserMessage(text, currentExpenses, userName);
       
-      if (result.type === 'ADD_EXPENSE') {
-        const data = result.data as any;
-        // Generamos el ID aquí para enviarlo IGUAL a React y a Google Sheets
-        const newId = crypto.randomUUID();
-        const expenseWithId = { ...data, id: newId };
-        
-        onAddExpense(expenseWithId);
-        
-        let sync = '';
-        if (sheetUrl) {
-          sync = '\n\n✅ *Sincronizado con Sheets.*';
-          sheetsService.addExpense(sheetUrl, expenseWithId).catch(console.error);
-        }
-        
-        addMessage(`¡Listo ${userName}! Registré $${data.amount} en **${data.description}**.\n📅 Fecha de gasto: ${data.expenseDate} ${sync}`, 'bot');
-      } 
-      else if (result.type === 'DELETE_EXPENSE') {
-        onDeleteExpense(result.id);
-        
-        let sync = '';
-        if (sheetUrl) {
-          sync = ' (y de Sheets)';
-          await sheetsService.deleteExpense(sheetUrl, result.id);
+      if (result.type === 'FUNCTION_CALLS') {
+        const expensesToAdd: any[] = [];
+        let botResponses: string[] = [];
+
+        for (const call of result.calls) {
+          const { name, args } = call;
+
+          if (name === 'add_expense') {
+            const newExpense = {
+              ...args,
+              id: crypto.randomUUID(),
+              entryDate: new Date().toISOString()
+            };
+            expensesToAdd.push(newExpense);
+            onAddExpense(newExpense);
+          } 
+          
+          else if (name === 'delete_expense') {
+            const query = (args.searchQuery as string).toLowerCase();
+            const toDelete = currentExpenses.find(e => 
+              e.description.toLowerCase().includes(query) || 
+              e.amount.toString() === query
+            );
+            if (toDelete) {
+              onDeleteExpense(toDelete.id);
+              if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, toDelete.id);
+              botResponses.push(`🗑️ Borré: **${toDelete.description}** ($${toDelete.amount}).`);
+            } else {
+              botResponses.push(`No encontré nada parecido a "${query}" para borrar.`);
+            }
+          }
+
+          else if (name === 'get_expenses_history') {
+            const { startDate, endDate, filterDescription } = args as any;
+            let filtered = currentExpenses;
+
+            if (startDate) {
+              filtered = filtered.filter(e => e.expenseDate >= startDate);
+            }
+            if (endDate) {
+              filtered = filtered.filter(e => e.expenseDate <= endDate);
+            }
+
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const summary = await ai.models.generateContent({
+              model: "gemini-3-flash-preview",
+              contents: `Genera un informe breve de estos gastos filtrados (${filterDescription || 'rango solicitado'}): ${JSON.stringify(filtered)}. Si no hay gastos en ese rango, avisale al usuario amablemente.`,
+              config: { systemInstruction: `Asistente financiero argentino. Usuario: ${userName}.` }
+            });
+            botResponses.push(summary.text || "No encontré gastos en esas fechas.");
+          }
         }
 
-        addMessage(`🗑️ He borrado el gasto: **${result.description}**${sync}.`, 'bot');
-      }
+        // Si hay gastos para agregar, lo hacemos en lote (bulk)
+        if (expensesToAdd.length > 0) {
+          if (sheetUrl) {
+            await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
+          }
+          const totalAdded = expensesToAdd.reduce((sum, e) => sum + e.amount, 0);
+          botResponses.push(`✅ Registré **${expensesToAdd.length}** gastos por un total de **$${totalAdded.toLocaleString()}**.`);
+        }
+
+        if (botResponses.length > 0) {
+          addMessage(botResponses.join('\n\n'), 'bot');
+        }
+      } 
       else if (result.type === 'TEXT') {
         addMessage(result.text, 'bot');
       }
     } catch (error) {
       console.error(error);
-      addMessage('Hubo un error al procesar tu mensaje. Intentá de nuevo.', 'bot');
+      addMessage('Hubo un problema. ¿Podés intentar de nuevo?', 'bot');
     } finally {
       setIsProcessing(false);
     }
@@ -77,8 +115,8 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
 
   return (
     <div className="flex flex-col h-full whatsapp-bg relative">
-      <div className="bg-[#e1f3fb] text-[#054664] text-[11px] py-1.5 px-4 text-center font-black border-b border-blue-100 uppercase tracking-tighter shadow-sm z-10">
-        {sheetUrl ? '📊 Sincronización con Google Sheets Activa' : '⚠️ Modo Local - Configura en Ajustes ⚙️'}
+      <div className="bg-[#e1f3fb] text-[#054664] text-[10px] py-1.5 px-4 text-center font-black border-b border-blue-100 uppercase tracking-widest shadow-sm z-10">
+        {sheetUrl ? '☁️ Sincronización en la nube activa' : '⚠️ Modo Local'}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth custom-scrollbar">
@@ -100,8 +138,8 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         ))}
         {isProcessing && (
           <div className="flex justify-start">
-            <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
-              <span className="text-xs font-bold text-emerald-600">GastoBot escribiendo...</span>
+            <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-sm flex items-center gap-2 border border-emerald-100">
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Analizando...</span>
               <div className="flex gap-1">
                 <div className="w-1 h-1 bg-emerald-600 rounded-full animate-bounce"></div>
                 <div className="w-1 h-1 bg-emerald-600 rounded-full animate-bounce delay-100"></div>
@@ -112,18 +150,18 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         )}
       </div>
 
-      <div className="bg-slate-100 p-3 flex items-center gap-2 border-t border-slate-200 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+      <div className="bg-white/80 backdrop-blur-md p-3 flex items-center gap-2 border-t border-slate-200">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder={`Escribe un gasto, ${userName}...`}
-          className="flex-1 bg-white rounded-full px-5 py-3 shadow-inner outline-none text-[16px] text-slate-950 font-semibold border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 placeholder-slate-400"
+          placeholder={`Hola ${userName}, ¿qué anotamos?`}
+          className="flex-1 bg-slate-100 rounded-2xl px-5 py-3 outline-none text-[15px] text-slate-900 font-semibold border border-transparent focus:border-emerald-500 transition-all"
         />
         <button 
           onClick={handleSend} 
           disabled={!input.trim() || isProcessing} 
-          className="p-3.5 bg-[#075e54] text-white rounded-full shadow-lg disabled:bg-slate-300 active:scale-90 transition-transform flex-shrink-0"
+          className="p-3.5 bg-[#075e54] text-white rounded-full shadow-lg disabled:bg-slate-300 active:scale-90 transition-transform"
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>

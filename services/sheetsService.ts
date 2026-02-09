@@ -11,18 +11,20 @@ export interface SheetExpense {
 export const sheetsService = {
   async fetchExpenses(url: string): Promise<Expense[]> {
     try {
-      // Usamos un timeout para evitar esperas infinitas
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'list' }),
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
+      
+      if (!response.ok) throw new Error("Respuesta del servidor no válida.");
+      
       const data = await response.json();
       
       if (data.status === 'success' && Array.isArray(data.data)) {
@@ -30,31 +32,35 @@ export const sheetsService = {
           id: item.id || crypto.randomUUID(),
           amount: Number(item.amount),
           category: item.category as Category,
-          description: item.description,
-          expenseDate: item.expenseDate,
+          description: item.description || "Sin descripción",
+          expenseDate: item.expenseDate || new Date().toISOString().split('T')[0],
           entryDate: item.entryDate || new Date().toISOString()
         }));
       }
       return [];
     } catch (error) {
       console.error("Error fetching from Sheets:", error);
-      throw new Error("No se pudo conectar con el Google Sheet. Verificá que el Script esté publicado como 'Web App' y con acceso para 'Cualquiera'.");
+      throw new Error("⚠️ No se pudo conectar. Verificá que la URL sea la de 'Aplicación Web' y que el acceso esté configurado como 'Cualquiera'.");
+    }
+  },
+
+  async bulkAddExpenses(url: string, expenses: SheetExpense[]) {
+    try {
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'bulkAdd', expenses }),
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Error bulk adding to Sheets:", error);
+      return { success: false };
     }
   },
 
   async addExpense(url: string, expense: SheetExpense) {
-    try {
-      await fetch(url, {
-        method: 'POST',
-        mode: 'no-cors', // Importante para evitar problemas de CORS en escrituras simples
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'add', ...expense }),
-      });
-      return { success: true };
-    } catch (error) {
-      console.error("Error adding to Sheets:", error);
-      return { success: false };
-    }
+    return this.bulkAddExpenses(url, [expense]);
   },
 
   async deleteExpense(url: string, id: string) {
