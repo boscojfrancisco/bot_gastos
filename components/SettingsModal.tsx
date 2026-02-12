@@ -62,7 +62,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentUrl, onSave, onClo
     }
   }
 
-  // Soporte para registros múltiples (Lote)
   if (action === 'bulkAdd' || action === 'add') {
     var expenses = action === 'bulkAdd' ? payload.expenses : [payload];
     var now = new Date();
@@ -118,12 +117,12 @@ function convertDateToIso(googleDate) {
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
           <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
             <h4 className="text-emerald-900 font-black text-[10px] uppercase tracking-widest mb-4">INSTRUCCIONES DE ACTUALIZACIÓN:</h4>
-            <p className="text-[11px] text-emerald-800 mb-4 font-medium">Si ya tenías el script, por favor **reemplazalo por este nuevo** para soportar registros múltiples e informes por fecha.</p>
+            <p className="text-[11px] text-emerald-800 mb-4 font-medium">Es necesario actualizar el script en tu Google Sheet para soportar registros múltiples y reportes de fecha.</p>
             <ol className="text-[11px] text-emerald-800 space-y-3 list-decimal list-inside font-bold">
               <li>Copia el nuevo código debajo.</li>
-              <li>En Apps Script, borra todo y pega esto.</li>
-              <li>Pulsa **Implementar > Nueva implementación**.</li>
-              <li>Asegúrate de que el acceso diga **"Cualquiera"**.</li>
+              <li>En el editor de Apps Script, borra el código viejo y pega este nuevo.</li>
+              <li>Pulsa **Implementar &gt; Nueva implementación**.</li>
+              <li>Asegúrate de configurar el acceso como **"Cualquiera"**.</li>
             </ol>
           </div>
 

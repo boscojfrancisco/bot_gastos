@@ -11,12 +11,12 @@ const addExpenseTool: FunctionDeclaration = {
   name: 'add_expense',
   parameters: {
     type: Type.OBJECT,
-    description: 'Registra un nuevo gasto. Llama a esta función varias veces si el usuario menciona múltiples gastos.',
+    description: 'Registra un nuevo gasto. Llama a esta función varias veces si el usuario menciona múltiples gastos en el mismo mensaje.',
     properties: {
       amount: { type: Type.NUMBER, description: 'Monto en pesos' },
-      category: { type: Type.STRING, description: 'Categoría', enum: CATEGORIES },
-      description: { type: Type.STRING, description: 'Qué se compró' },
-      expenseDate: { type: Type.STRING, description: 'Fecha YYYY-MM-DD. Por defecto hoy.' },
+      category: { type: Type.STRING, description: 'Categoría del gasto', enum: CATEGORIES },
+      description: { type: Type.STRING, description: 'Breve descripción de qué se compró' },
+      expenseDate: { type: Type.STRING, description: 'Fecha del gasto en formato YYYY-MM-DD. Por defecto hoy.' },
     },
     required: ['amount', 'category', 'description', 'expenseDate'],
   },
@@ -26,11 +26,11 @@ const getExpensesHistoryTool: FunctionDeclaration = {
   name: 'get_expenses_history',
   parameters: {
     type: Type.OBJECT,
-    description: 'Consulta el historial de gastos. Puede filtrar por rango de fechas si el usuario lo pide (ej: "gastos de febrero" o "últimos 10 días").',
+    description: 'Consulta el historial de gastos para generar reportes. Puede filtrar por fechas específicas, meses o rangos.',
     properties: {
-      startDate: { type: Type.STRING, description: 'Fecha inicio YYYY-MM-DD (opcional)' },
-      endDate: { type: Type.STRING, description: 'Fecha fin YYYY-MM-DD (opcional)' },
-      filterDescription: { type: Type.STRING, description: 'Descripción de lo que busca el usuario (ej: "mes de febrero") para el contexto.' }
+      startDate: { type: Type.STRING, description: 'Fecha de inicio YYYY-MM-DD (opcional)' },
+      endDate: { type: Type.STRING, description: 'Fecha de fin YYYY-MM-DD (opcional)' },
+      filterDescription: { type: Type.STRING, description: 'Descripción textual de la consulta del usuario (ej: "gastos de febrero" o "esta semana") para contexto del reporte.' }
     },
   },
 };
@@ -39,9 +39,9 @@ const deleteExpenseTool: FunctionDeclaration = {
   name: 'delete_expense',
   parameters: {
     type: Type.OBJECT,
-    description: 'Elimina un gasto.',
+    description: 'Elimina un gasto específico.',
     properties: {
-      searchQuery: { type: Type.STRING, description: 'Descripción o monto para buscar el gasto a eliminar.' },
+      searchQuery: { type: Type.STRING, description: 'Descripción o monto para identificar el gasto a borrar.' },
     },
     required: ['searchQuery'],
   },
@@ -67,9 +67,9 @@ export async function processUserMessage(
         systemInstruction: `Eres GastoBot Argentina. Usuario: ${userName}. Hoy es ${dayName} ${todayStr}.
         
         REGLAS CRÍTICAS:
-        1. Si el usuario menciona varios gastos (ej: "gasté 100 en pan y 200 en coca"), DEBES llamar a 'add_expense' UNA VEZ POR CADA GASTO.
-        2. Si el usuario pide un informe o resumen de fechas específicas (ej: "gastos de ayer", "febrero", "esta semana"), llama a 'get_expenses_history' con startDate y endDate.
-        3. Sé amable, usa emojis y responde con estilo argentino.
+        1. Si el usuario menciona varios gastos (ej: "Gaste 10 en pan, 20 en taxi y 30 en luz"), DEBES llamar a 'add_expense' UNA VEZ POR CADA GASTO (en este ejemplo, 3 veces).
+        2. Si el usuario pide ver gastos de una fecha, mes o rango (ej: "cuanto gaste en febrero", "gastos de los ultimos 10 dias"), llama a 'get_expenses_history' con las fechas correspondientes calculadas desde hoy (${todayStr}).
+        3. Mantén un tono informal, usa emojis y jerga argentina (che, boludo, plata, etc).
         4. Categorías permitidas: ${CATEGORIES.join(', ')}.`
       },
     });

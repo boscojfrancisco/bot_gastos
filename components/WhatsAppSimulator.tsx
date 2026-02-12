@@ -62,15 +62,15 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
             if (toDelete) {
               onDeleteExpense(toDelete.id);
               if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, toDelete.id);
-              botResponses.push(`🗑️ Borré: **${toDelete.description}** ($${toDelete.amount}).`);
+              botResponses.push(`🗑️ Borré el gasto de **${toDelete.description}** ($${toDelete.amount}).`);
             } else {
-              botResponses.push(`No encontré nada parecido a "${query}" para borrar.`);
+              botResponses.push(`No encontré ningún gasto que coincida con "${query}" para borrar.`);
             }
           }
 
           else if (name === 'get_expenses_history') {
             const { startDate, endDate, filterDescription } = args as any;
-            let filtered = currentExpenses;
+            let filtered = [...currentExpenses];
 
             if (startDate) {
               filtered = filtered.filter(e => e.expenseDate >= startDate);
@@ -80,22 +80,23 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
             }
 
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const summary = await ai.models.generateContent({
+            const summaryResponse = await ai.models.generateContent({
               model: "gemini-3-flash-preview",
-              contents: `Genera un informe breve de estos gastos filtrados (${filterDescription || 'rango solicitado'}): ${JSON.stringify(filtered)}. Si no hay gastos en ese rango, avisale al usuario amablemente.`,
-              config: { systemInstruction: `Asistente financiero argentino. Usuario: ${userName}.` }
+              contents: `Analiza estos gastos filtrados (${filterDescription || 'solicitados'}): ${JSON.stringify(filtered)}. 
+              Genera un resumen breve y amigable para el usuario ${userName}. 
+              Si no hay gastos, responde con gracia argentina que no hay nada registrado en ese periodo.`,
+              config: { systemInstruction: "Eres un asistente financiero argentino amable y experto en resumir cuentas." }
             });
-            botResponses.push(summary.text || "No encontré gastos en esas fechas.");
+            botResponses.push(summaryResponse.text || "No encontré gastos en esas fechas, che.");
           }
         }
 
-        // Si hay gastos para agregar, lo hacemos en lote (bulk)
         if (expensesToAdd.length > 0) {
           if (sheetUrl) {
             await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
           }
-          const totalAdded = expensesToAdd.reduce((sum, e) => sum + e.amount, 0);
-          botResponses.push(`✅ Registré **${expensesToAdd.length}** gastos por un total de **$${totalAdded.toLocaleString()}**.`);
+          const totalBatch = expensesToAdd.reduce((sum, e) => sum + Number(e.amount), 0);
+          botResponses.push(`✅ ¡Listo! Registré **${expensesToAdd.length}** gastos nuevos por un total de **$${totalBatch.toLocaleString()}**.`);
         }
 
         if (botResponses.length > 0) {
@@ -107,7 +108,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
       }
     } catch (error) {
       console.error(error);
-      addMessage('Hubo un problema. ¿Podés intentar de nuevo?', 'bot');
+      addMessage('Che, se me chispoteó un cable. ¿Podés repetir el mensaje?', 'bot');
     } finally {
       setIsProcessing(false);
     }
@@ -139,11 +140,11 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         {isProcessing && (
           <div className="flex justify-start">
             <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-sm flex items-center gap-2 border border-emerald-100">
-              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Analizando...</span>
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Bot pensando...</span>
               <div className="flex gap-1">
-                <div className="w-1 h-1 bg-emerald-600 rounded-full animate-bounce"></div>
-                <div className="w-1 h-1 bg-emerald-600 rounded-full animate-bounce delay-100"></div>
-                <div className="w-1 h-1 bg-emerald-600 rounded-full animate-bounce delay-200"></div>
+                <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce"></div>
+                <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce delay-100"></div>
+                <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce delay-200"></div>
               </div>
             </div>
           </div>
@@ -155,7 +156,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder={`Hola ${userName}, ¿qué anotamos?`}
+          placeholder={`Hola ${userName}, ¿qué anotamos hoy?`}
           className="flex-1 bg-slate-100 rounded-2xl px-5 py-3 outline-none text-[15px] text-slate-900 font-semibold border border-transparent focus:border-emerald-500 transition-all"
         />
         <button 
