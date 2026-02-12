@@ -1,10 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Expense, ChatMessage } from './types';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import WhatsAppSimulator from './components/WhatsAppSimulator';
 import SettingsModal from './components/SettingsModal';
 import { sheetsService } from './services/sheetsService';
+import { telegramService } from './services/telegramService';
+import { processUserMessage } from './services/geminiService';
+import { GoogleGenAI } from "@google/genai";
 
 const App: React.FC = () => {
   const [userName, setUserName] = useState<string>(localStorage.getItem('user_name') || '');
@@ -18,15 +22,85 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'chat'>('chat');
   const [sheetUrl, setSheetUrl] = useState<string>(localStorage.getItem('sheet_url') || '');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTelegramEnabled, setIsTelegramEnabled] = useState(localStorage.getItem('tg_enabled') === 'true');
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const lastUpdateId = useRef<number>(Number(localStorage.getItem('tg_last_id')) || 0);
 
-  // Sincronización automática al cargar si hay URL
+  // Sincronización automática al cargar
   useEffect(() => {
     if (sheetUrl && expenses.length === 0) {
       syncFromSheet(sheetUrl);
     }
   }, [sheetUrl]);
+
+  // Motor de Escucha de Telegram (Efecto de fondo)
+  useEffect(() => {
+    if (!isTelegramEnabled || !sheetUrl) return;
+
+    let isPolling = true;
+    const pollTelegram = async () => {
+      while (isPolling) {
+        const updates = await telegramService.getUpdates(lastUpdateId.current + 1);
+        for (const update of updates) {
+          if (update.update_id > lastUpdateId.current) {
+            lastUpdateId.current = update.update_id;
+            localStorage.setItem('tg_last_id', lastUpdateId.current.toString());
+            
+            if (update.message?.text) {
+              await handleTelegramMessage(update.message.text, update.message.chat.id, update.message.from.first_name);
+            }
+          }
+        }
+        await new Promise(r => setTimeout(r, 3500)); // Delay entre polls para no saturar
+      }
+    };
+
+    pollTelegram();
+    return () => { isPolling = false; };
+  }, [isTelegramEnabled, sheetUrl, expenses]);
+
+  const handleTelegramMessage = async (text: string, chatId: number, senderName: string) => {
+    // Procesar con Gemini (reutilizamos la lógica del simulador)
+    const result = await processUserMessage(text, expenses, senderName);
+    
+    if (result.type === 'FUNCTION_CALLS') {
+      const expensesToAdd: any[] = [];
+      let responses: string[] = [];
+
+      for (const call of result.calls) {
+        if (call.name === 'add_expense') {
+          const newExp = { ...call.args, id: crypto.randomUUID(), entryDate: new Date().toISOString() };
+          expensesToAdd.push(newExp);
+          addExpense(newExp);
+        } else if (call.name === 'get_expenses_history') {
+          // Lógica de reporte para Telegram
+          const { startDate, endDate } = call.args as any;
+          let filtered = expenses;
+          if (startDate) filtered = filtered.filter(e => e.expenseDate >= startDate);
+          if (endDate) filtered = filtered.filter(e => e.expenseDate <= endDate);
+          
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const summary = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: `Genera un reporte resumido para Telegram de estos gastos: ${JSON.stringify(filtered)}`,
+            config: { systemInstruction: "Asistente financiero breve." }
+          });
+          responses.push(summary.text || "No hay gastos.");
+        }
+      }
+
+      if (expensesToAdd.length > 0) {
+        await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
+        const total = expensesToAdd.reduce((s, e) => s + e.amount, 0);
+        responses.push(`✅ Anoté **${expensesToAdd.length}** gastos ($${total}) en tu planilla.`);
+      }
+
+      await telegramService.sendMessage(chatId, responses.join('\n\n'));
+    } else {
+      await telegramService.sendMessage(chatId, result.text);
+    }
+  };
 
   const syncFromSheet = async (url: string) => {
     setIsLoading(true);
@@ -35,81 +109,36 @@ const App: React.FC = () => {
       const data = await sheetsService.fetchExpenses(url);
       setExpenses(data);
       if (userName && messages.length === 0) {
-        setMessages([
-          {
-            id: '1',
-            text: `¡Hola de nuevo ${userName}! 👋 He recuperado tus ${data.length} gastos del historial.\n\n¿Qué registramos hoy?`,
-            sender: 'bot',
-            timestamp: new Date()
-          }
-        ]);
+        setMessages([{
+          id: '1',
+          text: `¡Hola ${userName}! 👋 Recuperé ${data.length} gastos. ¿Qué anotamos hoy?`,
+          sender: 'bot',
+          timestamp: new Date()
+        }]);
       }
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Error de conexión con Sheets.');
+      setError(err.message || 'Error de conexión.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleInitialSetup = async () => {
-    if (!tempUrl.trim()) {
-      setError('La URL de Google Sheets es obligatoria para funcionar.');
-      return;
-    }
-
-    const name = (tempName || 'Usuario').trim();
-    const url = tempUrl.trim();
-
+    if (!tempUrl.trim()) { setError('La URL es obligatoria.'); return; }
     setIsLoading(true);
-    setError('');
-    
     try {
-      const data = await sheetsService.fetchExpenses(url);
-      
-      localStorage.setItem('user_name', name);
-      localStorage.setItem('sheet_url', url);
-      
-      setUserName(name);
-      setSheetUrl(url);
+      const data = await sheetsService.fetchExpenses(tempUrl);
+      localStorage.setItem('user_name', tempName || 'Usuario');
+      localStorage.setItem('sheet_url', tempUrl);
+      setUserName(tempName || 'Usuario');
+      setSheetUrl(tempUrl);
       setExpenses(data);
-      
-      setMessages([
-        {
-          id: '1',
-          text: `¡Configuración exitosa! 👋\n\nHe sincronizado ${data.length} registros anteriores de tu base de datos.`,
-          sender: 'bot',
-          timestamp: new Date()
-        }
-      ]);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (err: any) { setError(err.message); }
+    finally { setIsLoading(false); }
   };
 
-  const saveSheetUrl = async (url: string) => {
-    if (url === sheetUrl) {
-      setIsSettingsOpen(false);
-      return;
-    }
-    await syncFromSheet(url);
-    setSheetUrl(url);
-    localStorage.setItem('sheet_url', url);
-    setIsSettingsOpen(false);
-  };
-
-  const addExpense = useCallback((data: { amount: number, category: any, description: string, expenseDate: string, id?: string }) => {
-    const expense: Expense = {
-      id: data.id || crypto.randomUUID(),
-      amount: data.amount,
-      category: data.category,
-      description: data.description,
-      expenseDate: data.expenseDate,
-      entryDate: new Date().toISOString()
-    };
-    setExpenses(prev => [expense, ...prev]);
+  const addExpense = useCallback((data: any) => {
+    setExpenses(prev => [{ ...data, id: data.id || crypto.randomUUID() }, ...prev]);
   }, []);
 
   const deleteExpenseState = useCallback((id: string) => {
@@ -118,101 +147,48 @@ const App: React.FC = () => {
 
   const handleDeleteExpense = useCallback(async (id: string) => {
     const gasto = expenses.find(e => e.id === id);
-    if (!gasto) return;
-
-    if (window.confirm(`¿Seguro que querés borrar "${gasto.description}"?\nEsto eliminará el registro permanentemente.`)) {
-      // Borrado optimista en la UI
+    if (gasto && window.confirm(`¿Borrar "${gasto.description}"?`)) {
       deleteExpenseState(id);
-      
-      // Borrado en la nube
-      if (sheetUrl) {
-        try {
-          await sheetsService.deleteExpense(sheetUrl, id);
-        } catch (err) {
-          console.error("Error al borrar en Sheets:", err);
-        }
-      }
+      if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, id);
     }
   }, [expenses, sheetUrl, deleteExpenseState]);
 
   const addMessage = useCallback((text: string, sender: 'user' | 'bot') => {
-    setMessages(prev => [...prev, {
-      id: crypto.randomUUID(),
-      text,
-      sender,
-      timestamp: new Date()
-    }]);
+    setMessages(prev => [...prev, { id: crypto.randomUUID(), text, sender, timestamp: new Date() }]);
   }, []);
+
+  const toggleTelegram = () => {
+    const newVal = !isTelegramEnabled;
+    setIsTelegramEnabled(newVal);
+    localStorage.setItem('tg_enabled', newVal.toString());
+  };
 
   if (!userName || !sheetUrl) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#075e54] p-6 text-center">
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm animate-fade-in border-4 border-emerald-500/10">
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm border-4 border-emerald-500/10">
           <div className="text-5xl mb-4">🇦🇷</div>
-          <h1 className="text-2xl font-black text-gray-800 mb-1 tracking-tighter">GASTOBOT CLOUD</h1>
-          <p className="text-gray-400 mb-8 text-[11px] font-bold uppercase tracking-widest">Sincronización Total con Sheets</p>
-          
-          <div className="space-y-4">
-            <div className="space-y-1 text-left">
-               <label className="text-[10px] font-black text-slate-400 px-2 uppercase">Tu Nombre</label>
-               <input 
-                 type="text" 
-                 placeholder="Ej: Juan"
-                 value={tempName}
-                 onChange={(e) => setTempName(e.target.value)}
-                 className="w-full bg-slate-50 border-2 border-slate-100 focus:border-emerald-500 focus:bg-white rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none transition-all"
-               />
-            </div>
-
-            <div className="space-y-1 text-left">
-               <label className="text-[10px] font-black text-slate-400 px-2 uppercase">URL de tu Apps Script</label>
-               <input 
-                 type="text" 
-                 placeholder="https://script.google.com/macros/s/..."
-                 value={tempUrl}
-                 onChange={(e) => setTempUrl(e.target.value)}
-                 className="w-full bg-slate-50 border-2 border-slate-100 focus:border-emerald-500 focus:bg-white rounded-2xl px-4 py-3 text-[12px] font-bold text-slate-800 outline-none transition-all"
-               />
-            </div>
-
-            {error && (
-              <div className="bg-red-50 p-3 rounded-xl border border-red-100">
-                <p className="text-red-500 text-[10px] font-black leading-tight">{error}</p>
-              </div>
-            )}
-            
+          <h1 className="text-2xl font-black text-gray-800 mb-1 tracking-tighter uppercase">GastoBot Cloud</h1>
+          <div className="space-y-4 mt-6">
+            <input 
+              type="text" placeholder="Tu Nombre" value={tempName}
+              onChange={(e) => setTempName(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold"
+            />
+            <input 
+              type="text" placeholder="URL Apps Script" value={tempUrl}
+              onChange={(e) => setTempUrl(e.target.value)}
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 text-xs font-bold"
+            />
+            {error && <p className="text-red-500 text-[10px] font-black">{error}</p>}
             <button 
-              onClick={handleInitialSetup}
-              disabled={isLoading}
-              className="w-full bg-[#075e54] text-white font-black py-4 rounded-2xl shadow-xl hover:bg-emerald-800 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              onClick={handleInitialSetup} disabled={isLoading}
+              className="w-full bg-[#075e54] text-white font-black py-4 rounded-2xl shadow-xl active:scale-95 disabled:opacity-50"
             >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  CONECTANDO...
-                </>
-              ) : 'VINCULAR MI CUENTA'}
-            </button>
-            
-            <button 
-               onClick={() => setShowConfigHelp(true)}
-               className="text-[10px] text-emerald-600 font-black hover:underline tracking-widest uppercase"
-            >
-              ¿Cómo obtener mi URL?
+              {isLoading ? 'CONECTANDO...' : 'VINCULAR MI CUENTA'}
             </button>
           </div>
         </div>
-        
-        {showConfigHelp && (
-          <SettingsModal 
-            currentUrl="" 
-            onSave={() => {}} 
-            onClose={() => setShowConfigHelp(false)} 
-            instructionsOnly={true}
-          />
-        )}
-        
-        <p className="mt-8 text-emerald-200/40 text-[10px] font-bold tracking-[0.2em] uppercase italic">Powered by Gemini 2.5 & Google Cloud</p>
       </div>
     );
   }
@@ -224,40 +200,26 @@ const App: React.FC = () => {
         setActiveTab={setActiveTab} 
         onOpenSettings={() => setIsSettingsOpen(true)}
         isSinking={true}
+        isTelegramActive={isTelegramEnabled}
       />
-      
       <main className="flex-1 overflow-hidden relative bg-gray-50">
         {activeTab === 'dashboard' ? (
-          <Dashboard 
-            expenses={expenses} 
-            onDelete={handleDeleteExpense} 
-          />
+          <Dashboard expenses={expenses} onDelete={handleDeleteExpense} />
         ) : (
           <WhatsAppSimulator 
-            messages={messages} 
-            addMessage={addMessage} 
-            onAddExpense={addExpense}
-            onDeleteExpense={deleteExpenseState}
-            currentExpenses={expenses}
-            sheetUrl={sheetUrl}
-            userName={userName}
+            messages={messages} addMessage={addMessage} 
+            onAddExpense={addExpense} onDeleteExpense={deleteExpenseState}
+            currentExpenses={expenses} sheetUrl={sheetUrl} userName={userName}
           />
         )}
       </main>
-
       {isSettingsOpen && (
         <SettingsModal 
-          currentUrl={sheetUrl} 
-          onSave={saveSheetUrl} 
+          currentUrl={sheetUrl} onSave={(u) => { setSheetUrl(u); localStorage.setItem('sheet_url', u); setIsSettingsOpen(false); }} 
           onClose={() => setIsSettingsOpen(false)} 
+          isTelegramEnabled={isTelegramEnabled}
+          onToggleTelegram={toggleTelegram}
         />
-      )}
-
-      {isLoading && (
-        <div className="absolute inset-0 bg-white/40 backdrop-blur-md z-[100] flex flex-col items-center justify-center">
-            <div className="w-14 h-14 border-4 border-[#075e54] border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-[#075e54] font-black text-xs tracking-widest animate-pulse">SINCRONIZANDO NUBE...</p>
-        </div>
       )}
     </div>
   );

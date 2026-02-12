@@ -6,9 +6,10 @@ interface HeaderProps {
   setActiveTab: (tab: 'dashboard' | 'chat') => void;
   onOpenSettings: () => void;
   isSinking: boolean;
+  isTelegramActive?: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenSettings, isSinking }) => {
+const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenSettings, isSinking, isTelegramActive }) => {
   return (
     <header className="bg-[#075e54] text-white p-4 shadow-md z-20">
       <div className="flex items-center justify-between mb-4">
@@ -17,9 +18,15 @@ const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenSettings
           GastoBot
         </h1>
         <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end">
-             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isSinking ? 'bg-emerald-400 text-white animate-pulse' : 'bg-gray-400 text-gray-200'}`}>
-                {isSinking ? 'REAL-TIME SYNC' : 'LOCAL MODE'}
+          <div className="flex items-center gap-2">
+             {isTelegramActive && (
+               <div className="flex items-center gap-1 bg-[#0088cc] px-2 py-0.5 rounded-full animate-pulse border border-white/20">
+                 <span className="text-[8px] font-black">TG BOT</span>
+                 <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+               </div>
+             )}
+             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isSinking ? 'bg-emerald-400 text-white' : 'bg-gray-400 text-gray-200'}`}>
+                {isSinking ? 'LIVE SYNC' : 'OFFLINE'}
              </span>
           </div>
           <button 
@@ -32,24 +39,9 @@ const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenSettings
           </button>
         </div>
       </div>
-      
       <nav className="flex border-b border-emerald-700">
-        <button
-          onClick={() => setActiveTab('chat')}
-          className={`flex-1 py-2 text-center font-semibold transition-colors ${
-            activeTab === 'chat' ? 'border-b-4 border-white' : 'text-emerald-200'
-          }`}
-        >
-          CHAT
-        </button>
-        <button
-          onClick={() => setActiveTab('dashboard')}
-          className={`flex-1 py-2 text-center font-semibold transition-colors ${
-            activeTab === 'dashboard' ? 'border-b-4 border-white' : 'text-emerald-200'
-          }`}
-        >
-          RESUMEN
-        </button>
+        <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2 text-center font-semibold ${activeTab === 'chat' ? 'border-b-4 border-white' : 'text-emerald-200'}`}>CHAT</button>
+        <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-2 text-center font-semibold ${activeTab === 'dashboard' ? 'border-b-4 border-white' : 'text-emerald-200'}`}>RESUMEN</button>
       </nav>
     </header>
   );
