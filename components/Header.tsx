@@ -11,60 +11,62 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenSettings, isSinking, isTelegramActive }) => {
   return (
-    <header className="bg-[#075e54] text-white p-4 shadow-lg z-30">
+    <header className="bg-[#075e54] text-white p-4 pt-5 shadow-xl z-30 relative">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-black flex items-center gap-2 italic tracking-tighter uppercase">
-          <span className="bg-white text-[#075e54] w-8 h-8 flex items-center justify-center rounded-full text-sm not-italic shadow-inner">💰</span>
-          GastoBot
-        </h1>
-        <div className="flex items-center gap-2">
-          <div className="flex flex-col items-end mr-1">
-             {isTelegramActive && (
-               <div className="flex items-center gap-1 bg-[#0088cc] px-2 py-0.5 rounded-full border border-white/20 shadow-sm mb-1">
-                 <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div>
-                 <span className="text-[8px] font-black uppercase tracking-widest">TG Live</span>
-               </div>
-             )}
-             <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${isSinking ? 'bg-emerald-400 text-[#075e54]' : 'bg-slate-500 text-slate-200'}`}>
-                {isSinking ? 'Cloud' : 'Offline'}
-             </span>
+        {/* Logo e Indicadores de Estado */}
+        <div className="flex items-center gap-3">
+          <div className="bg-white text-[#075e54] w-9 h-9 flex items-center justify-center rounded-xl text-lg shadow-md">
+            💰
           </div>
+          <div className="flex flex-col">
+            <h1 className="text-lg font-black tracking-tighter uppercase italic leading-none">GastoBot</h1>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${isSinking ? 'bg-emerald-300 animate-pulse' : 'bg-slate-400'}`}></span>
+              <span className="text-[9px] font-bold opacity-90 uppercase tracking-widest">
+                {isSinking ? 'Online' : 'Local'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Indicador Telegram */}
+          {isTelegramActive && (
+            <div className="hidden sm:flex items-center gap-1.5 bg-[#0088cc]/90 px-2.5 py-1 rounded-lg border border-white/10 shadow-sm">
+              <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
+              <span className="text-[9px] font-black uppercase tracking-wider">TG Live</span>
+            </div>
+          )}
           
-          {/* BOTÓN DE TUERQUITA (AJUSTES) - REINSTALADO Y MEJORADO */}
+          {/* BOTÓN DE CONFIGURACIÓN - ALTO CONTRASTE */}
           <button 
-            onClick={onOpenSettings}
-            className="w-11 h-11 flex items-center justify-center bg-white/20 hover:bg-white/30 active:bg-white/40 rounded-2xl transition-all shadow-md group"
-            title="Configuración"
+            onClick={(e) => {
+              e.preventDefault();
+              onOpenSettings();
+            }}
+            className="group flex items-center gap-2 bg-white text-[#075e54] px-3 py-2 rounded-xl shadow-lg hover:bg-gray-100 active:scale-95 transition-all"
+            aria-label="Abrir Configuración"
           >
-            <svg 
-              viewBox="0 0 24 24" 
-              width="24" 
-              height="24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2.5" 
-              strokeLinecap="round" 
-              strokeLinejoin="round"
-              className="group-active:rotate-90 transition-transform duration-300"
-            >
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Ajustes</span>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" className="group-hover:rotate-90 transition-transform duration-500">
+              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
             </svg>
           </button>
         </div>
       </div>
-      <nav className="flex bg-black/10 rounded-2xl p-1">
+
+      <nav className="flex bg-black/20 rounded-xl p-1 backdrop-blur-sm">
         <button 
           onClick={() => setActiveTab('chat')} 
-          className={`flex-1 py-2.5 text-center text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'chat' ? 'bg-white text-[#075e54] shadow-md' : 'text-emerald-100 hover:bg-white/5'}`}
+          className={`flex-1 py-2.5 text-center text-[11px] font-black uppercase tracking-[0.15em] rounded-lg transition-all ${activeTab === 'chat' ? 'bg-white text-[#075e54] shadow-md transform scale-[1.02]' : 'text-emerald-100/70 hover:text-white hover:bg-white/10'}`}
         >
-          WhatsApp
+          Chat
         </button>
         <button 
           onClick={() => setActiveTab('dashboard')} 
-          className={`flex-1 py-2.5 text-center text-xs font-black uppercase tracking-widest rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-white text-[#075e54] shadow-md' : 'text-emerald-100 hover:bg-white/5'}`}
+          className={`flex-1 py-2.5 text-center text-[11px] font-black uppercase tracking-[0.15em] rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-white text-[#075e54] shadow-md transform scale-[1.02]' : 'text-emerald-100/70 hover:text-white hover:bg-white/10'}`}
         >
-          Panel
+          Resumen
         </button>
       </nav>
     </header>

@@ -65,20 +65,21 @@ export async function processUserMessage(
       contents: text,
       config: {
         tools: [{ functionDeclarations: [addExpenseTool, deleteExpenseTool, getExpensesHistoryTool] }],
-        systemInstruction: `Eres GastoBot Argentina. Usuario: ${userName}. Fecha hoy: ${todayStr}.
+        systemInstruction: `Eres GastoBot Argentina. Usuario: ${userName}. Hoy: ${todayStr}.
         
-        REGLAS DE ORO:
-        1. SE EXTREMADAMENTE BREVE. No saludes si no es necesario.
-        2. Si el usuario pregunta cuánto gastó o pide ver gastos (ej: "cuánto gasté", "gastos del mes", "gastos de la semana"), DEBES llamar a 'get_expenses_history'. 
-        3. Si no especifica fecha, asume el mes actual (desde ${firstDayOfMonth} hasta ${todayStr}).
-        4. No hables de más. Ve directo a la acción.`
+        REGLAS CRÍTICAS:
+        1. NO SALUDES. NO DES EXPLICACIONES.
+        2. Si preguntan "¿Cuánto gasté?", "Mis gastos", "Gastos de hoy", etc., USA SIEMPRE 'get_expenses_history'.
+        3. Si no especifican fecha, asume el mes actual (${firstDayOfMonth} al ${todayStr}).
+        4. Si preguntan por un periodo (ej: "10 días"), calcula las fechas correctas y llama a la herramienta.
+        5. Sé una herramienta, no un amigo. Sé minimalista.`
       },
     });
 
     const functionCalls = response.functionCalls;
     if (functionCalls && functionCalls.length > 0) return { type: 'FUNCTION_CALLS', calls: functionCalls };
-    return { type: 'TEXT', text: response.text || "No entendí, che." };
+    return { type: 'TEXT', text: response.text || "No entendí." };
   } catch (error) {
-    return { type: 'TEXT', text: "⚠️ Error de conexión." };
+    return { type: 'TEXT', text: "⚠️ Error." };
   }
 }

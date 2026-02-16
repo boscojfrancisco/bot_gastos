@@ -68,24 +68,31 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
             if (startDate) filtered = filtered.filter(e => e.expenseDate >= startDate);
             if (endDate) filtered = filtered.filter(e => e.expenseDate <= endDate);
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const summaryResponse = await ai.models.generateContent({
-              model: "gemini-3-flash-preview",
-              contents: `Analiza estos gastos: ${JSON.stringify(filtered)}. 
-              Genera un reporte así:
-              1. Lista con bullets (•): "Fecha - Descripción: $Monto" (uno por línea).
-              2. Al final: "**TOTAL: $Monto**".
-              PROHIBIDO: No saludes, no uses introducciones, ve directo a la lista. Si no hay gastos, di "No hay gastos en este periodo."`,
-              config: { systemInstruction: "Contador experto minimalista argentino." }
-            });
-            botResponses.push(summaryResponse.text || "Sin datos.");
+            // Generar el reporte exacto solicitado
+            const totalPeriodo = filtered.reduce((acc, curr) => acc + Number(curr.amount), 0);
+            
+            if (filtered.length === 0) {
+              botResponses.push("No hay gastos registrados en este periodo.");
+              continue;
+            }
+
+            // Ordenar por fecha descendente
+            const sorted = filtered.sort((a, b) => b.expenseDate.localeCompare(a.expenseDate));
+            
+            let report = sorted.map(e => {
+              const dateStr = new Date(e.expenseDate + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+              return `• ${dateStr} - ${e.description}: **$${e.amount.toLocaleString()}**`;
+            }).join('\n');
+
+            report += `\n\n💰 **TOTAL: $${totalPeriodo.toLocaleString()}**`;
+            botResponses.push(report);
           }
         }
 
         if (expensesToAdd.length > 0) {
           if (sheetUrl) await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
           const totalBatch = expensesToAdd.reduce((sum, e) => sum + Number(e.amount), 0);
-          botResponses.push(`✅ Registré **${expensesToAdd.length}** gastos por **$${totalBatch.toLocaleString()}**.`);
+          botResponses.push(`✅ Registrado: **$${totalBatch.toLocaleString()}**.`);
         }
 
         if (botResponses.length > 0) addMessage(botResponses.join('\n\n'), 'bot');
@@ -94,7 +101,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         addMessage(result.text, 'bot');
       }
     } catch (error) {
-      addMessage('Error al procesar, che.', 'bot');
+      addMessage('Error al procesar.', 'bot');
     } finally {
       setIsProcessing(false);
     }
@@ -103,7 +110,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
   return (
     <div className="flex flex-col h-full whatsapp-bg relative">
       <div className="bg-[#e1f3fb] text-[#054664] text-[10px] py-1.5 px-4 text-center font-black border-b border-blue-100 uppercase tracking-widest shadow-sm z-10">
-        {sheetUrl ? '☁️ Cloud Sync Active' : '⚠️ Local Mode'}
+        {sheetUrl ? 'Sincronización Cloud Activa' : '⚠️ Modo Local'}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth custom-scrollbar">
@@ -114,7 +121,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
             }`}>
               <div className="whitespace-pre-wrap font-medium">
                 {msg.text.split('\n').map((line, i) => (
-                  <p key={i} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<b class="font-black text-slate-950">$1</b>') || '&nbsp;' }} />
+                  <p key={i} className="mb-0.5" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<b class="font-black text-slate-950">$1</b>') || '&nbsp;' }} />
                 ))}
               </div>
               <div className="text-[10px] text-slate-400 text-right mt-1 font-bold">
@@ -126,7 +133,7 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         {isProcessing && (
           <div className="flex justify-start">
             <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-sm flex items-center gap-2 border border-emerald-100">
-              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Calculando...</span>
+              <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">GastoBot pensando...</span>
               <div className="flex gap-1">
                 <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce"></div>
                 <div className="w-1.5 h-1.5 bg-emerald-600 rounded-full animate-bounce delay-100"></div>
@@ -136,16 +143,16 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         )}
       </div>
 
-      <div className="bg-white/80 backdrop-blur-md p-3 flex items-center gap-2 border-t border-slate-200">
+      <div className="bg-white/80 backdrop-blur-md p-3 pb-6 flex items-center gap-2 border-t border-slate-200">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder={`Hola ${userName}, ¿qué anotamos?`}
-          className="flex-1 bg-slate-100 rounded-2xl px-5 py-3 outline-none text-[15px] text-slate-900 font-semibold border border-transparent focus:border-emerald-500 transition-all"
+          placeholder={`Escribe aquí...`}
+          className="flex-1 bg-white rounded-2xl px-5 py-4 outline-none text-[15px] text-slate-900 font-semibold border border-slate-200 focus:border-emerald-500 transition-all shadow-sm"
         />
-        <button onClick={handleSend} disabled={!input.trim() || isProcessing} className="p-3.5 bg-[#075e54] text-white rounded-full shadow-lg disabled:bg-slate-300 active:scale-90 transition-transform">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+        <button onClick={handleSend} disabled={!input.trim() || isProcessing} className="w-14 h-14 flex items-center justify-center bg-[#075e54] text-white rounded-full shadow-lg disabled:bg-slate-300 active:scale-90 transition-transform">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
         </button>
       </div>
     </div>
