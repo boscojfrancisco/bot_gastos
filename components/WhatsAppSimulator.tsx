@@ -45,18 +45,27 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
           const { name, args } = call;
 
           if (name === 'add_expense') {
-            const newExpense = { ...args, id: crypto.randomUUID(), entryDate: new Date().toISOString() };
+            let amount = Number(args.amount);
+            // Aplicar multiplicador x1000 si el monto es entero y menor a 1000
+            if (Number.isInteger(amount) && amount < 1000) {
+              amount *= 1000;
+            }
+            const newExpense = { ...args, amount, id: crypto.randomUUID(), entryDate: new Date().toISOString() };
             expensesToAdd.push(newExpense);
-            onAddExpense(newExpense);
+            onAddExpense(newExpense); // Actualiza estado local inmediatamente
           } 
           
           else if (name === 'delete_expense') {
             const query = (args.searchQuery as string).toLowerCase();
             const toDelete = currentExpenses.find(e => e.description.toLowerCase().includes(query) || e.amount.toString() === query);
             if (toDelete) {
-              onDeleteExpense(toDelete.id);
-              if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, toDelete.id);
-              botResponses.push(`🗑️ Borré: **${toDelete.description}** ($${toDelete.amount}).`);
+              try {
+                if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, toDelete.id);
+                onDeleteExpense(toDelete.id); // Actualiza estado local si Sheets fue exitoso
+                botResponses.push(`🗑️ Borré: **${toDelete.description}** ($${toDelete.amount.toLocaleString()}).`);
+              } catch (err: any) {
+                botResponses.push(`⚠️ Error al borrar en la planilla: ${err.message}`);
+              }
             } else {
               botResponses.push(`No encontré nada con "${query}".`);
             }
@@ -90,9 +99,13 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         }
 
         if (expensesToAdd.length > 0) {
-          if (sheetUrl) await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
-          const totalBatch = expensesToAdd.reduce((sum, e) => sum + Number(e.amount), 0);
-          botResponses.push(`✅ Registrado: **$${totalBatch.toLocaleString()}**.`);
+          try {
+            if (sheetUrl) await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
+            const totalBatch = expensesToAdd.reduce((sum, e) => sum + Number(e.amount), 0);
+            botResponses.push(`✅ Registrado: **$${totalBatch.toLocaleString()}**.`);
+          } catch (err: any) {
+            botResponses.push(`⚠️ Error al guardar en la planilla: ${err.message}`);
+          }
         }
 
         if (botResponses.length > 0) addMessage(botResponses.join('\n\n'), 'bot');
@@ -100,8 +113,9 @@ const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
       else if (result.type === 'TEXT') {
         addMessage(result.text, 'bot');
       }
-    } catch (error) {
-      addMessage('Error al procesar.', 'bot');
+    } catch (error: any) {
+      // Captura errores generales de procesamiento (ej. de la IA)
+      addMessage(`⚠️ Error al procesar: ${error.message || "Un problema desconocido ocurrió."}`, 'bot');
     } finally {
       setIsProcessing(false);
     }

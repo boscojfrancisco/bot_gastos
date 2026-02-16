@@ -57,7 +57,12 @@ const App: React.FC = () => {
       let responses: string[] = [];
       for (const call of result.calls) {
         if (call.name === 'add_expense') {
-          const newExp = { ...call.args, id: crypto.randomUUID(), entryDate: new Date().toISOString() };
+          let amount = Number(call.args.amount);
+          // Aplicar multiplicador x1000 si el monto es entero y menor a 1000
+          if (Number.isInteger(amount) && amount < 1000) {
+            amount *= 1000;
+          }
+          const newExp = { ...call.args, amount, id: crypto.randomUUID(), entryDate: new Date().toISOString() };
           expensesToAdd.push(newExp);
           addExpense(newExp);
         } else if (call.name === 'get_expenses_history') {
@@ -78,12 +83,30 @@ const App: React.FC = () => {
             report += `\n\n💰 **TOTAL: $${total.toLocaleString()}**`;
             responses.push(report);
           }
-        }
+        } else if (call.name === 'delete_expense') {
+            const query = (call.args.searchQuery as string).toLowerCase();
+            const toDelete = expenses.find(e => e.description.toLowerCase().includes(query) || e.amount.toString() === query);
+            if (toDelete) {
+              try {
+                await sheetsService.deleteExpense(sheetUrl, toDelete.id);
+                deleteExpenseState(toDelete.id);
+                responses.push(`🗑️ Borré: **${toDelete.description}** ($${toDelete.amount.toLocaleString()}).`);
+              } catch (err: any) {
+                responses.push(`Error al borrar en la planilla: ${err.message}`);
+              }
+            } else {
+              responses.push(`No encontré nada con "${query}".`);
+            }
+          }
       }
       if (expensesToAdd.length > 0) {
-        await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
-        const total = expensesToAdd.reduce((s, e) => s + Number(e.amount), 0);
-        responses.push(`✅ Registrado: *$${total}*`);
+        try {
+          await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
+          const total = expensesToAdd.reduce((s, e) => s + Number(e.amount), 0);
+          responses.push(`✅ Registrado: *$${total.toLocaleString()}*`);
+        } catch (err: any) {
+          responses.push(`Error al guardar en la planilla: ${err.message}`);
+        }
       }
       await telegramService.sendMessage(chatId, responses.join('\n\n'));
     } else {
@@ -123,8 +146,12 @@ const App: React.FC = () => {
   const handleDeleteExpense = useCallback(async (id: string) => {
     const gasto = expenses.find(e => e.id === id);
     if (gasto && window.confirm(`¿Borrar "${gasto.description}"?`)) {
-      deleteExpenseState(id);
-      if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, id);
+      try {
+        deleteExpenseState(id);
+        if (sheetUrl) await sheetsService.deleteExpense(sheetUrl, id);
+      } catch (err: any) {
+        alert(`Error al borrar el gasto: ${err.message}`);
+      }
     }
   }, [expenses, sheetUrl, deleteExpenseState]);
 
@@ -168,17 +195,17 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {isSettingsOpen && (
+        {/* Asegurarse de que el modal de ajustes solo se renderice si está abierto y en modo instrucciones */}
+        {isSettingsOpen && ( 
           <SettingsModal 
             currentUrl={tempUrl} 
             onSave={(u) => { 
               setTempUrl(u); 
-              setSheetUrl(u); // Esto no disparará el efecto de carga todavía hasta que el usuario complete el form
+              setSheetUrl(u);
               setIsSettingsOpen(false); 
             }} 
             onClose={() => setIsSettingsOpen(false)}
-            instructionsOnly={true} // Modo solo instrucciones para el setup
+            instructionsOnly={true}
           />
         )}
       </div>
@@ -226,4 +253,5 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+// Fix: Changed to a named export to resolve "Module has no default export" error.
+export { App };

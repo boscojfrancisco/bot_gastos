@@ -78,8 +78,14 @@ export async function processUserMessage(
 
     const functionCalls = response.functionCalls;
     if (functionCalls && functionCalls.length > 0) return { type: 'FUNCTION_CALLS', calls: functionCalls };
-    return { type: 'TEXT', text: response.text || "No entendí." };
-  } catch (error) {
-    return { type: 'TEXT', text: "⚠️ Error." };
+    return { type: 'TEXT', text: response.text || "No entendí la solicitud." };
+  } catch (error: any) {
+    let errorMessage = "Un error desconocido ocurrió al procesar con la IA.";
+    if (error.status) {
+      errorMessage = `Error de la IA (${error.status}): ${error.message}`;
+    } else if (error instanceof Error) {
+      errorMessage = `Error de comunicación con la IA: ${error.message}`;
+    }
+    return { type: 'TEXT', text: `⚠️ ${errorMessage}` };
   }
 }
