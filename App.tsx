@@ -73,9 +73,9 @@ const App: React.FC = () => {
             const total = sorted.reduce((acc, curr) => acc + Number(curr.amount), 0);
             let report = sorted.map(e => {
               const d = new Date(e.expenseDate + 'T00:00:00');
-              return `• ${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} - ${e.description}: *$${e.amount}*`;
+              return `• ${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} - ${e.description}: **$${e.amount.toLocaleString()}**`;
             }).join('\n');
-            report += `\n\n💰 *TOTAL: $${total}*`;
+            report += `\n\n💰 **TOTAL: $${total.toLocaleString()}**`;
             responses.push(report);
           }
         }
