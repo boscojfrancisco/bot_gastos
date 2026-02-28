@@ -1,6 +1,9 @@
+
 import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Expense } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
+import { Trash2, TrendingDown, Calendar, Tag, CreditCard } from 'lucide-react';
 
 interface DashboardProps {
   expenses: Expense[];
@@ -8,117 +11,187 @@ interface DashboardProps {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  'Luz': '#FFD700',
-  'Agua': '#00BFFF',
-  'Internet': '#6A5ACD',
-  'Hipoteca': '#8B4513',
-  'Alquiler': '#A52A2A',
-  'Teléfono': '#32CD32',
-  'Servicio Doméstico': '#FF69B4',
-  'Ocio': '#FF4500',
-  'Restaurantes': '#DC143C',
-  'Transporte': '#708090',
-  'Otros': '#808080'
+  'Luz': '#FACC15',
+  'Agua': '#38BDF8',
+  'Internet': '#818CF8',
+  'Hipoteca': '#A16207',
+  'Alquiler': '#B91C1C',
+  'Teléfono': '#4ADE80',
+  'Servicio Doméstico': '#F472B6',
+  'Ocio': '#FB923C',
+  'Restaurantes': '#E11D48',
+  'Transporte': '#64748B',
+  'Otros': '#94A3B8'
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ expenses, onDelete }) => {
   const total = useMemo(() => expenses.reduce((acc, curr) => acc + curr.amount, 0), [expenses]);
+  
+  const todayTotal = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return expenses
+      .filter(e => e.expenseDate === today)
+      .reduce((acc, curr) => acc + curr.amount, 0);
+  }, [expenses]);
 
   const chartData = useMemo(() => {
     const groups: Record<string, number> = {};
     expenses.forEach(e => {
       groups[e.category] = (groups[e.category] || 0) + e.amount;
     });
-    return Object.entries(groups).map(([name, value]) => ({ name, value }));
+    return Object.entries(groups)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
   }, [expenses]);
 
   return (
-    <div className="h-full overflow-y-auto p-4 pb-24 bg-gray-50">
-      <div className="bg-white rounded-3xl p-8 shadow-sm mb-6 text-center">
-        <h2 className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Total Acumulado</h2>
-        <p className="text-5xl font-black text-[#075e54]">${total.toLocaleString()}</p>
+    <div className="h-full overflow-y-auto p-4 pb-24 bg-[#f8fafc] custom-scrollbar">
+      {/* Bento Stats */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center"
+        >
+          <h2 className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Gasto Total</h2>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-black text-slate-300">$</span>
+            <span className="text-5xl font-black text-slate-900 tracking-tighter">{total.toLocaleString()}</span>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-emerald-50 rounded-[2rem] p-5 border border-emerald-100"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingDown className="w-3 h-3 text-emerald-600" />
+            <h3 className="text-emerald-600 text-[9px] font-black uppercase tracking-wider">Hoy</h3>
+          </div>
+          <p className="text-xl font-black text-emerald-900">${todayTotal.toLocaleString()}</p>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-slate-900 rounded-[2rem] p-5 text-white"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <CreditCard className="w-3 h-3 text-slate-400" />
+            <h3 className="text-slate-400 text-[9px] font-black uppercase tracking-wider">Transacciones</h3>
+          </div>
+          <p className="text-xl font-black">{expenses.length}</p>
+        </motion.div>
       </div>
 
       {expenses.length > 0 ? (
-        <>
-          <div className="bg-white rounded-3xl p-4 shadow-sm mb-6 h-72">
+        <div className="space-y-6">
+          {/* Chart Section */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-slate-100 h-72 relative"
+          >
+            <div className="absolute top-6 left-6">
+              <h3 className="text-slate-900 font-black text-sm uppercase tracking-tight">Distribución</h3>
+              <p className="text-slate-400 text-[10px] font-bold">Por categoría</p>
+            </div>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={chartData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={65}
-                  outerRadius={90}
-                  paddingAngle={8}
+                  innerRadius={60}
+                  outerRadius={85}
+                  paddingAngle={5}
                   dataKey="value"
+                  stroke="none"
                 >
                   {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || '#ccc'} />
+                    <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || '#cbd5e1'} />
                   ))}
                 </Pie>
                 <Tooltip 
-                  contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`$${value}`, 'Monto']}
+                  contentStyle={{ 
+                    borderRadius: '20px', 
+                    border: 'none', 
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                    fontSize: '12px',
+                    fontWeight: '900'
+                  }}
+                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                 />
               </PieChart>
             </ResponsiveContainer>
-          </div>
+          </motion.div>
 
+          {/* List Section */}
           <div className="space-y-3">
-            <h3 className="font-bold text-gray-800 px-2 text-lg">Historial de Gastos</h3>
-            {expenses.map(expense => (
-              <div 
-                key={expense.id} 
-                className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border-l-4 relative overflow-hidden transition-all" 
-                style={{ borderColor: CATEGORY_COLORS[expense.category] }}
-              >
-                <div className="flex-1 pr-4">
-                  <p className="font-bold text-gray-800 line-clamp-1">{expense.description}</p>
-                  <div className="flex gap-2 mt-1">
-                    <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
-                      {expense.category}
-                    </span>
-                    <span className="text-[10px] text-emerald-600 font-bold">
-                      📅 {new Date(expense.expenseDate + 'T00:00:00').toLocaleDateString('es-AR')}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-black text-lg text-gray-800 whitespace-nowrap">-${expense.amount.toLocaleString()}</span>
-                  <button 
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(expense.id);
-                    }}
-                    className="w-11 h-11 flex items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-500 hover:text-white active:scale-90 transition-all shadow-sm"
-                    aria-label="Borrar gasto"
-                  >
-                    <svg 
-                      className="pointer-events-none"
-                      viewBox="0 0 24 24" 
-                      width="20" 
-                      height="20" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      strokeWidth="2.5" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
+            <div className="flex items-center justify-between px-2">
+              <h3 className="font-black text-slate-900 text-lg tracking-tight">Historial Reciente</h3>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Últimos movimientos</span>
+            </div>
+            
+            <AnimatePresence mode="popLayout">
+              {expenses.map((expense, idx) => (
+                <motion.div 
+                  layout
+                  key={expense.id} 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="bg-white p-4 rounded-3xl shadow-sm flex justify-between items-center border border-slate-50 group hover:shadow-md transition-all"
+                >
+                  <div className="flex items-center gap-4 flex-1 pr-4">
+                    <div 
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${CATEGORY_COLORS[expense.category]}20`, color: CATEGORY_COLORS[expense.category] }}
                     >
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
+                      <Tag className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-black text-slate-900 truncate text-[15px]">{expense.description}</p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className="text-[10px] font-black uppercase tracking-tighter" style={{ color: CATEGORY_COLORS[expense.category] }}>
+                          {expense.category}
+                        </span>
+                        <div className="flex items-center gap-1 text-slate-400">
+                          <Calendar className="w-3 h-3" />
+                          <span className="text-[10px] font-bold">
+                            {new Date(expense.expenseDate + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    <span className="font-black text-lg text-slate-900">-${expense.amount.toLocaleString()}</span>
+                    <button 
+                      onClick={() => onDelete(expense.id)}
+                      className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-        </>
+        </div>
       ) : (
-        <div className="text-center py-20">
-          <div className="text-6xl mb-6 grayscale opacity-20">📉</div>
-          <p className="text-gray-400 font-medium">Empieza a registrar para ver tus gráficas</p>
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+            <TrendingDown className="w-10 h-10 text-slate-300" />
+          </div>
+          <h3 className="text-slate-900 font-black text-lg mb-1">Sin datos aún</h3>
+          <p className="text-slate-400 text-sm font-medium max-w-[200px]">Registra tu primer gasto en el chat para ver las estadísticas.</p>
         </div>
       )}
     </div>

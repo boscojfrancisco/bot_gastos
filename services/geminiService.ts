@@ -8,6 +8,9 @@ const CATEGORIES = [
   'Transporte', 'Otros'
 ];
 
+// Instantiate once to reuse
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
 const addExpenseTool: FunctionDeclaration = {
   name: 'add_expense',
   parameters: {
@@ -58,8 +61,6 @@ export async function processUserMessage(
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: text,
@@ -72,7 +73,8 @@ export async function processUserMessage(
         2. Si preguntan "¿Cuánto gasté?", "Mis gastos", "Gastos de hoy", etc., USA SIEMPRE 'get_expenses_history'.
         3. Si no especifican fecha, asume el mes actual (${firstDayOfMonth} al ${todayStr}).
         4. Si preguntan por un periodo (ej: "10 días"), calcula las fechas correctas y llama a la herramienta.
-        5. Sé una herramienta, no un amigo. Sé minimalista.`
+        5. Sé una herramienta, no un amigo. Sé minimalista.
+        6. Si el usuario dice algo como "Gaste 500 en pan", asume que son pesos argentinos.`
       },
     });
 
@@ -80,6 +82,7 @@ export async function processUserMessage(
     if (functionCalls && functionCalls.length > 0) return { type: 'FUNCTION_CALLS', calls: functionCalls };
     return { type: 'TEXT', text: response.text || "No entendí la solicitud." };
   } catch (error: any) {
+    console.error("Gemini Error:", error);
     let errorMessage = "Un error desconocido ocurrió al procesar con la IA.";
     if (error.status) {
       errorMessage = `Error de la IA (${error.status}): ${error.message}`;

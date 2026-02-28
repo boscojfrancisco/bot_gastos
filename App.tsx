@@ -8,7 +8,10 @@ import SettingsModal from './components/SettingsModal';
 import { sheetsService } from './services/sheetsService';
 import { telegramService } from './services/telegramService';
 import { processUserMessage } from './services/geminiService';
+import { expenseProcessor } from './services/expenseProcessor';
 import { GoogleGenAI } from "@google/genai";
+import { motion, AnimatePresence } from 'motion/react';
+import { Sparkles, Settings, LayoutDashboard, MessageCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [userName, setUserName] = useState<string>(localStorage.getItem('user_name') || '');
@@ -51,67 +54,17 @@ const App: React.FC = () => {
   }, [isTelegramEnabled, sheetUrl, expenses]);
 
   const handleTelegramMessage = async (text: string, chatId: number, senderName: string) => {
-    const result = await processUserMessage(text, expenses, senderName);
-    if (result.type === 'FUNCTION_CALLS') {
-      const expensesToAdd: any[] = [];
-      let responses: string[] = [];
-      for (const call of result.calls) {
-        if (call.name === 'add_expense') {
-          let amount = Number(call.args.amount);
-          // Aplicar multiplicador x1000 si el monto es entero y menor a 1000
-          if (Number.isInteger(amount) && amount < 1000) {
-            amount *= 1000;
-          }
-          const newExp = { ...call.args, amount, id: crypto.randomUUID(), entryDate: new Date().toISOString() };
-          expensesToAdd.push(newExp);
-          addExpense(newExp);
-        } else if (call.name === 'get_expenses_history') {
-          const { startDate, endDate } = call.args as any;
-          let filtered = [...expenses];
-          if (startDate) filtered = filtered.filter(e => e.expenseDate >= startDate);
-          if (endDate) filtered = filtered.filter(e => e.expenseDate <= endDate);
-          
-          if (filtered.length === 0) {
-            responses.push("Sin gastos registrados.");
-          } else {
-            const sorted = filtered.sort((a, b) => b.expenseDate.localeCompare(a.expenseDate));
-            const total = sorted.reduce((acc, curr) => acc + Number(curr.amount), 0);
-            let report = sorted.map(e => {
-              const d = new Date(e.expenseDate + 'T00:00:00');
-              return `• ${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} - ${e.description}: **$${e.amount.toLocaleString()}**`;
-            }).join('\n');
-            report += `\n\n💰 **TOTAL: $${total.toLocaleString()}**`;
-            responses.push(report);
-          }
-        } else if (call.name === 'delete_expense') {
-            const query = (call.args.searchQuery as string).toLowerCase();
-            const toDelete = expenses.find(e => e.description.toLowerCase().includes(query) || e.amount.toString() === query);
-            if (toDelete) {
-              try {
-                await sheetsService.deleteExpense(sheetUrl, toDelete.id);
-                deleteExpenseState(toDelete.id);
-                responses.push(`🗑️ Borré: **${toDelete.description}** ($${toDelete.amount.toLocaleString()}).`);
-              } catch (err: any) {
-                responses.push(`Error al borrar en la planilla: ${err.message}`);
-              }
-            } else {
-              responses.push(`No encontré nada con "${query}".`);
-            }
-          }
-      }
-      if (expensesToAdd.length > 0) {
-        try {
-          await sheetsService.bulkAddExpenses(sheetUrl, expensesToAdd);
-          const total = expensesToAdd.reduce((s, e) => s + Number(e.amount), 0);
-          responses.push(`✅ Registrado: *$${total.toLocaleString()}*`);
-        } catch (err: any) {
-          responses.push(`Error al guardar en la planilla: ${err.message}`);
-        }
-      }
-      await telegramService.sendMessage(chatId, responses.join('\n\n'));
-    } else {
-      await telegramService.sendMessage(chatId, result.text);
+    const result = await expenseProcessor.process(text, expenses, senderName, sheetUrl);
+    
+    // Update local state with any changes
+    if (result.expensesAdded.length > 0) {
+      setExpenses(prev => [...result.expensesAdded, ...prev]);
     }
+    if (result.expensesDeleted.length > 0) {
+      setExpenses(prev => prev.filter(e => !result.expensesDeleted.includes(e.id)));
+    }
+    
+    await telegramService.sendMessage(chatId, result.botResponse);
   };
 
   const syncFromSheet = async (url: string) => {
@@ -213,7 +166,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col max-w-lg mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-slate-100">
+    <div className="h-screen flex flex-col max-w-lg mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-slate-100 font-sans">
       <Header 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
@@ -221,21 +174,69 @@ const App: React.FC = () => {
         isSinking={true} 
         isTelegramActive={isTelegramEnabled}
       />
-      <main className="flex-1 overflow-hidden relative bg-gray-50">
-        {activeTab === 'dashboard' ? (
-          <Dashboard expenses={expenses} onDelete={handleDeleteExpense} />
-        ) : (
-          <WhatsAppSimulator 
-            messages={messages} 
-            addMessage={addMessage} 
-            onAddExpense={addExpense} 
-            onDeleteExpense={deleteExpenseState} 
-            currentExpenses={expenses} 
-            sheetUrl={sheetUrl} 
-            userName={userName}
-          />
-        )}
+      
+      <main className="flex-1 relative overflow-hidden bg-slate-50">
+        <AnimatePresence mode="wait">
+          {activeTab === 'chat' ? (
+            <motion.div
+              key="chat"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-0"
+            >
+              <WhatsAppSimulator 
+                messages={messages} 
+                addMessage={addMessage}
+                onAddExpense={addExpense}
+                onDeleteExpense={deleteExpenseState}
+                currentExpenses={expenses}
+                sheetUrl={sheetUrl}
+                userName={userName}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="dashboard"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-0"
+            >
+              <Dashboard 
+                expenses={expenses} 
+                onDelete={handleDeleteExpense} 
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
+
+      {/* Bottom Navigation (Simplified) */}
+      <nav className="bg-white/80 backdrop-blur-xl border-t border-slate-100 px-6 py-3 flex justify-around items-center shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-50">
+        <button 
+          onClick={() => setActiveTab('chat')}
+          className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'chat' ? 'text-emerald-600' : 'text-slate-400'}`}
+        >
+          <div className={`p-2 rounded-2xl transition-all ${activeTab === 'chat' ? 'bg-emerald-50' : ''}`}>
+            <MessageCircle className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-widest">Chat</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center gap-1 transition-all ${activeTab === 'dashboard' ? 'text-emerald-600' : 'text-slate-400'}`}
+        >
+          <div className={`p-2 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-emerald-50' : ''}`}>
+            <LayoutDashboard className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-widest">Panel</span>
+        </button>
+      </nav>
+
       {isSettingsOpen && (
         <SettingsModal 
           currentUrl={sheetUrl} 
